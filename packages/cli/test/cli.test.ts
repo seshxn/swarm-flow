@@ -251,6 +251,132 @@ describe("CLI", () => {
     expect(qaRun.target).toEqual({ type: "url", value: "https://preview.example.com" });
   });
 
+  it("runs the Playwright QA backend and writes governed QA artifacts", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await import("node:fs/promises").then(({ writeFile }) =>
+      writeFile(join(workspace ?? "", "fake-test.mjs"), "process.exit(0);\n", "utf8")
+    );
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "qa",
+      "https://github.com/org/repo/pull/123",
+      "--backend",
+      "playwright",
+      "--target-url",
+      "https://preview.example.com",
+      "--test-command",
+      "node fake-test.mjs"
+    ]);
+
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
+    expect(runId).toBeTruthy();
+    const qaReport = await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "qa-report.md"), "utf8");
+    const preview = JSON.parse(
+      await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "github-comments.preview.json"), "utf8")
+    );
+    expect(qaReport).toContain("Playwright QA Report");
+    expect(preview.mode).toBe("preview");
+    expect(output.join("\n")).toContain("QA backend passed");
+  });
+
+  it("loads QA backend settings from a YAML config file", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await import("node:fs/promises").then(({ writeFile }) =>
+      Promise.all([
+        writeFile(join(workspace ?? "", "fake-test.mjs"), "process.exit(0);\n", "utf8"),
+        writeFile(
+          join(workspace ?? "", "swarm-flow.qa.yaml"),
+          [
+            "schema: v1",
+            "qa:",
+            "  target:",
+            "    baseUrl: https://config-preview.example.com",
+            "  test:",
+            "    command: node fake-test.mjs",
+            "  ai:",
+            "    provider: bedrock",
+            "    regionEnv: AWS_REGION",
+            "    bedrock:",
+            "      resource:",
+            "        type: inference-profile",
+            "        arnEnv: BEDROCK_INFERENCE_PROFILE_ARN"
+          ].join("\n"),
+          "utf8"
+        )
+      ])
+    );
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "qa",
+      "https://github.com/org/repo/pull/123",
+      "--backend",
+      "playwright",
+      "--config-file",
+      "swarm-flow.qa.yaml"
+    ]);
+
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
+    expect(runId).toBeTruthy();
+    const qaContext = JSON.parse(
+      await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "qa-context.json"), "utf8")
+    );
+    expect(qaContext.targetUrl).toBe("https://config-preview.example.com");
+    expect(qaContext.config.target.baseUrl).toBe("https://config-preview.example.com");
+    expect(qaContext.config.ai.provider).toBe("bedrock");
+    expect(output.join("\n")).toContain("QA backend passed");
+  });
+
+  it("keeps QA backend comments in preview mode without recording a posting selection", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await import("node:fs/promises").then(({ writeFile }) =>
+      writeFile(join(workspace ?? "", "fake-test.mjs"), "process.exit(0);\n", "utf8")
+    );
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "qa",
+      "https://github.com/org/repo/pull/123",
+      "--backend",
+      "playwright",
+      "--comment-mode",
+      "preview",
+      "--test-command",
+      "node fake-test.mjs"
+    ]);
+
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
+    expect(runId).toBeTruthy();
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId ?? "missing", "run.json"), "utf8"));
+    const preview = JSON.parse(
+      await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "github-comments.preview.json"), "utf8")
+    );
+    expect(preview.mode).toBe("preview");
+    expect(runState.external_posting_selections).toEqual([]);
+  });
+
   it("routes start review and start qa to standalone swarm flows", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const output: string[] = [];

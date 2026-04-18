@@ -73,10 +73,14 @@ phases:
 
   - id: qa_swarm
     description: Validate acceptance criteria and regression risk
-    purpose: Help QA focus on evidence, gaps, and high-risk flows.
+    purpose: Help QA focus on evidence, gaps, and high-risk flows using local QA backends or imported GitHub Action QA artifacts.
     agents: [qa]
     required_outputs: [qa_plan, acceptance_matrix, regression_risk_report, test_gap_report, qa_report, validation_status]
     dependencies: [implementation]
+    transition_conditions:
+      - QA evidence is normalized into qa_report, test_gap_report, and validation_status
+      - GitHub Action artifacts are imported or missing deploy targets are recorded as blockers or assumptions
+      - github-comments.preview.json remains preview-only until status_sync
 
   - id: review_swarm
     description: Review correctness, maintainability, and reviewability

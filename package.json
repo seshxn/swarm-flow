@@ -12,8 +12,8 @@
     "swarm-flow": "packages/cli/dist/index.js"
   },
   "scripts": {
-    "build": "tsc -b packages/core packages/connectors packages/runtime packages/adapters packages/sdk packages/cli",
-    "typecheck": "tsc -b packages/core packages/connectors packages/runtime packages/adapters packages/sdk packages/cli --pretty false",
+    "build": "tsc -b packages/core packages/connectors packages/runtime packages/adapters packages/qa packages/sdk packages/cli",
+    "typecheck": "tsc -b packages/core packages/connectors packages/runtime packages/adapters packages/qa packages/sdk packages/cli --pretty false",
     "test": "vitest run",
     "verify": "npm test && npm run typecheck && npm run build",
     "test:watch": "vitest",

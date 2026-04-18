@@ -56,6 +56,18 @@ Review and QA runs can create comment previews under `.runs/<run-id>/outputs/pre
 
 No comment is posted automatically. A later connector write must use the selected IDs, policy decision, idempotency key, and audit log entry.
 
+## GitHub Action QA Evidence
+
+The first-party QA Action writes run artifacts under `.runs/<run-id>/artifacts/` and uploads `.runs` as a GitHub Actions artifact. The expected QA artifact names are:
+
+- `qa-context.json`
+- `qa-report.md`
+- `test-gap-report.md`
+- `validation-status.md`
+- `github-comments.preview.json`
+
+Parent `epic` runs may import or link these artifacts during `qa_swarm`, but they still apply swarm-flow policy before progressing to delivery.
+
 ## Resumability
 
 Resuming a run means reading `run.json`, inspecting the current phase, checking required outputs, and continuing from the next valid transition. The system should never depend on chat history to know what happened.
