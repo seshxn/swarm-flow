@@ -1,0 +1,13 @@
+id: collect-ci-failure
+trigger: on_ci_failure
+description: Capture CI failure evidence and open a repair loop.
+conditions:
+  - ci_status:failed
+actions:
+  - connector:ci.read_failure
+  - artifact:write ci_failure_report
+  - hook:open-repair-loop
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

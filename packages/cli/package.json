@@ -1,0 +1,28 @@
+{
+  "name": "@swarm-flow/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "swarm-flow": "dist/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@swarm-flow/core": "0.1.0",
+    "@swarm-flow/runtime": "0.1.0",
+    "commander": "^12.1.0",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

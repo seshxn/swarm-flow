@@ -1,0 +1,12 @@
+id: package-followup
+trigger: after_run
+description: Package final delivery notes and follow-up reminders after the run closes.
+conditions:
+  - artifact_exists:release_notes_draft
+actions:
+  - artifact:write followup_summary
+  - connector:confluence.preview_update
+  - log:event
+safety:
+  external_writes: preview_only
+  retry_safe: true

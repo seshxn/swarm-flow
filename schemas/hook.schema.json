@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarm-flow.dev/schemas/hook.schema.json",
+  "title": "swarm-flow Hook",
+  "type": "object",
+  "required": ["id", "trigger", "actions"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "description": { "type": "string" },
+    "trigger": {
+      "type": "string",
+      "enum": [
+        "before_run",
+        "after_run",
+        "before_phase",
+        "after_phase",
+        "before_tool_write",
+        "after_tool_write",
+        "on_validation_failure",
+        "on_pr_open",
+        "on_ci_failure",
+        "on_merge",
+        "on_artifact_created"
+      ]
+    },
+    "phase": { "type": "string" },
+    "conditions": { "type": "array", "items": { "type": "string" } },
+    "actions": { "type": "array", "items": { "type": "string" } },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "external_writes": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "string", "enum": ["preview_only"] }
+          ]
+        },
+        "retry_safe": { "type": "boolean" }
+      }
+    }
+  }
+}

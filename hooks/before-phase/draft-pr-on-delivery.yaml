@@ -1,0 +1,15 @@
+id: draft-pr-on-delivery
+trigger: before_phase
+phase: delivery
+description: Draft PR body material from review, QA, and release artifacts.
+conditions:
+  - artifact_exists:review_report
+  - artifact_exists:qa_report
+actions:
+  - artifact:read pr_summary
+  - connector:github.preview_pr
+  - artifact:write github_pr_preview
+  - log:event
+safety:
+  external_writes: preview_only
+  retry_safe: true

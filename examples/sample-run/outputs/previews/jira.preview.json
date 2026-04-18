@@ -1,0 +1,14 @@
+{
+  "mode": "preview",
+  "target": "jira",
+  "idempotencyKey": "run-2026-04-17-bulk-case-reassignment-by-region:jira:preview",
+  "operations": [
+    {
+      "operation": "create",
+      "issueType": "Story",
+      "summary": "Bulk case reassignment by region",
+      "description": "Implement governed bulk reassignment with role checks, audit events, partial failure reporting, and validation coverage.",
+      "labels": ["swarm-flow", "feature-default", "preview"]
+    }
+  ]
+}

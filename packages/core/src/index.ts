@@ -1,0 +1,292 @@
+import { z } from "zod";
+
+export const hookSetSchema = z
+  .object({
+    before: z.array(z.string()).optional(),
+    after: z.array(z.string()).optional()
+  })
+  .strict();
+
+export const phaseSchema = z
+  .object({
+    id: z.string().min(1),
+    description: z.string().min(1),
+    purpose: z.string().optional(),
+    agents: z.array(z.string().min(1)).min(1),
+    required_outputs: z.array(z.string().min(1)).default([]),
+    dependencies: z.array(z.string().min(1)).default([]),
+    transition_conditions: z.array(z.string().min(1)).default([]),
+    output_expectations: z.record(z.string(), z.string()).optional(),
+    risk_escalation: z.array(z.string().min(1)).default([]),
+    optional: z.boolean().default(false),
+    hooks: hookSetSchema.optional(),
+    approval_required: z.boolean().default(false)
+  })
+  .strict();
+
+export const flowSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    phases: z.array(phaseSchema).min(1)
+  })
+  .strict();
+
+export type HookSet = z.infer<typeof hookSetSchema>;
+export type Phase = z.infer<typeof phaseSchema>;
+export type Flow = z.infer<typeof flowSchema>;
+
+export type ArtifactRegistryEntry = {
+  id: string;
+  path: string;
+  media_type: "text/markdown" | "application/json" | string;
+  created_at: string;
+  produced_by_phase: string;
+};
+
+export type RunState = {
+  id: string;
+  repo: {
+    root: string;
+  };
+  feature: {
+    title: string;
+    goal: string;
+  };
+  flow_id: string;
+  flow_snapshot: Flow;
+  current_phase: string;
+  completed_phases: string[];
+  pending_phases: string[];
+  artifact_registry: Record<string, ArtifactRegistryEntry>;
+  agent_executions: unknown[];
+  hook_executions: unknown[];
+  policy_decisions: PolicyDecision[];
+  approvals: Record<string, ApprovalRecord>;
+  tool_writes: unknown[];
+  connector_write_previews: ConnectorWritePreview[];
+  logs: RunLogEntry[];
+  unresolved_assumptions: string[];
+  unresolved_risks: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type ApprovalRecord = {
+  phase_id: string;
+  approved_by: string;
+  approved_at: string;
+  note?: string;
+};
+
+export type ConnectorWritePreview = {
+  connector_id: string;
+  operation: "create" | "update";
+  target: string;
+  idempotency_key: string;
+  preview_path: string;
+  created_at: string;
+};
+
+export type RunLogEntry = {
+  at: string;
+  level: "info" | "warn" | "error";
+  message: string;
+  data?: unknown;
+};
+
+export type Policy = {
+  id: string;
+  description?: string;
+  phase_entry_requires_artifacts?: Record<string, string[]>;
+  approval_required_phases?: string[];
+  phase_completion_requires_registered_artifacts?: boolean;
+  external_writes_require_preview?: boolean;
+  allowed_external_write_connectors?: string[];
+  block_delivery_when_validation_failed?: boolean;
+  risk_score_approval_threshold?: number;
+  delivery_readiness?: {
+    requires_validation_status?: "passed" | "failed" | "unknown" | string;
+    requires_review_report?: boolean;
+    requires_qa_report?: boolean;
+    requires_release_notes?: boolean;
+    requires_risk_approval_when_threshold_exceeded?: boolean;
+  };
+  blocked_without_approval?: string[];
+};
+
+export type PolicyDecision = {
+  allowed: boolean;
+  reasons: string[];
+};
+
+export type PhaseEntryEvaluation = {
+  policy: Policy;
+  phaseId: string;
+  artifacts: Set<string>;
+  approvals: Set<string>;
+  validationStatus?: "passed" | "failed" | "unknown";
+  riskScore?: number;
+};
+
+export type ExternalWriteEvaluation = {
+  policy: Policy;
+  connectorId: string;
+  preview: boolean;
+};
+
+export type ValidationResult =
+  | {
+      ok: true;
+      flow: Flow;
+      errors: [];
+    }
+  | {
+      ok: false;
+      errors: string[];
+    };
+
+export function validateFlow(candidate: unknown): ValidationResult {
+  const parsed = flowSchema.safeParse(candidate);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      errors: parsed.error.issues.map((issue) => `${issue.path.join(".") || "flow"}: ${issue.message}`)
+    };
+  }
+
+  const flow = parsed.data;
+  const errors: string[] = [];
+  const phaseIds = new Set<string>();
+
+  for (const phase of flow.phases) {
+    if (phaseIds.has(phase.id)) {
+      errors.push(`duplicate phase id ${phase.id}`);
+    }
+    phaseIds.add(phase.id);
+  }
+
+  for (const phase of flow.phases) {
+    for (const dependency of phase.dependencies) {
+      if (!phaseIds.has(dependency)) {
+        errors.push(`phase ${phase.id} has unknown dependency ${dependency}`);
+      }
+    }
+  }
+
+  const cycle = findDependencyCycle(flow.phases);
+  if (cycle) {
+    errors.push(`phase dependency cycle detected: ${cycle.join(" -> ")}`);
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+
+  return { ok: true, flow, errors: [] };
+}
+
+export function evaluatePhaseEntry(input: PhaseEntryEvaluation): PolicyDecision {
+  const reasons: string[] = [];
+  const requiredArtifacts = input.policy.phase_entry_requires_artifacts?.[input.phaseId] ?? [];
+
+  for (const artifactId of requiredArtifacts) {
+    if (!input.artifacts.has(artifactId)) {
+      reasons.push(`${input.phaseId} requires artifact ${artifactId}`);
+    }
+  }
+
+  if (input.policy.approval_required_phases?.includes(input.phaseId) && !input.approvals.has(input.phaseId)) {
+    reasons.push(`${input.phaseId} requires approval`);
+  }
+
+  if (
+    input.phaseId === "delivery" &&
+    input.policy.block_delivery_when_validation_failed &&
+    input.validationStatus === "failed"
+  ) {
+    reasons.push("delivery is blocked because validation failed");
+  }
+
+  if (
+    typeof input.policy.risk_score_approval_threshold === "number" &&
+    typeof input.riskScore === "number" &&
+    input.riskScore > input.policy.risk_score_approval_threshold &&
+    !input.approvals.has(`${input.phaseId}:risk`)
+  ) {
+    reasons.push(`${input.phaseId} risk score ${input.riskScore} requires approval`);
+  }
+
+  return {
+    allowed: reasons.length === 0,
+    reasons
+  };
+}
+
+export function evaluateExternalWrite(input: ExternalWriteEvaluation): PolicyDecision {
+  const reasons: string[] = [];
+
+  if (
+    input.policy.allowed_external_write_connectors &&
+    !input.policy.allowed_external_write_connectors.includes(input.connectorId)
+  ) {
+    reasons.push(`${input.connectorId} writes are not allowed by policy ${input.policy.id}`);
+  }
+
+  if (input.policy.external_writes_require_preview && !input.preview) {
+    reasons.push(`${input.connectorId} writes require preview mode`);
+  }
+
+  return {
+    allowed: reasons.length === 0,
+    reasons
+  };
+}
+
+function findDependencyCycle(phases: Phase[]): string[] | undefined {
+  const phaseById = new Map(phases.map((phase) => [phase.id, phase]));
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const path: string[] = [];
+
+  function visit(phaseId: string): string[] | undefined {
+    if (visiting.has(phaseId)) {
+      return [...path.slice(path.indexOf(phaseId)), phaseId];
+    }
+
+    if (visited.has(phaseId)) {
+      return undefined;
+    }
+
+    const phase = phaseById.get(phaseId);
+    if (!phase) {
+      return undefined;
+    }
+
+    visiting.add(phaseId);
+    path.push(phaseId);
+
+    for (const dependency of phase.dependencies) {
+      const cycle = visit(dependency);
+      if (cycle) {
+        return cycle;
+      }
+    }
+
+    path.pop();
+    visiting.delete(phaseId);
+    visited.add(phaseId);
+
+    return undefined;
+  }
+
+  for (const phase of phases) {
+    const cycle = visit(phase.id);
+    if (cycle) {
+      return cycle;
+    }
+  }
+
+  return undefined;
+}

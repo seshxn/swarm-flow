@@ -1,0 +1,12 @@
+id: open-repair-loop
+trigger: on_validation_failure
+description: Convert failed validation into a bounded repair plan.
+conditions:
+  - validation_status:failed
+actions:
+  - artifact:write repair_plan
+  - phase:retry implementation
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

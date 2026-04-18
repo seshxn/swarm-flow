@@ -1,0 +1,286 @@
+{
+  "id": "run-2026-04-17-bulk-case-reassignment-by-region",
+  "repo": {
+    "root": "/example/repo"
+  },
+  "feature": {
+    "title": "Bulk case reassignment by region",
+    "goal": "Allow admins to reassign cases in batches with audit logging."
+  },
+  "flow_id": "feature-default",
+  "flow_snapshot": {
+    "id": "feature-default",
+    "name": "Feature Delivery",
+    "description": "Standard governed flow for taking a feature from idea to shipped change.",
+    "phases": [
+      {
+        "id": "intake",
+        "description": "Normalize the feature request",
+        "agents": ["pm"],
+        "required_outputs": ["feature_brief"],
+        "dependencies": []
+      },
+      {
+        "id": "discovery",
+        "description": "Gather repo, Jira, docs, and system context",
+        "agents": ["scout"],
+        "required_outputs": ["discovery_report", "assumptions_log", "dependency_map"],
+        "dependencies": ["intake"]
+      },
+      {
+        "id": "planning",
+        "description": "Define scope and acceptance criteria",
+        "agents": ["pm", "architect"],
+        "required_outputs": ["acceptance_criteria", "task_plan"],
+        "dependencies": ["discovery"],
+        "approval_required": true
+      },
+      {
+        "id": "design",
+        "description": "Produce technical design and tradeoffs",
+        "agents": ["architect"],
+        "required_outputs": ["technical_design", "adr", "risk_report"],
+        "dependencies": ["planning"],
+        "approval_required": true
+      },
+      {
+        "id": "ticketing",
+        "description": "Create or update delivery work items",
+        "agents": ["pm"],
+        "required_outputs": ["jira_mapping"],
+        "dependencies": ["planning", "design"]
+      },
+      {
+        "id": "implementation",
+        "description": "Execute code changes on a working branch",
+        "agents": ["implementer"],
+        "required_outputs": ["code_changes", "tests_added"],
+        "dependencies": ["ticketing"]
+      },
+      {
+        "id": "validation",
+        "description": "Review, test, and assess risk",
+        "agents": ["reviewer", "qa"],
+        "required_outputs": ["review_report", "qa_report", "validation_status"],
+        "dependencies": ["implementation"]
+      },
+      {
+        "id": "documentation",
+        "description": "Update docs and delivery notes",
+        "agents": ["docs"],
+        "required_outputs": ["docs_update_report", "release_notes_draft"],
+        "dependencies": ["validation"]
+      },
+      {
+        "id": "delivery",
+        "description": "Open PR and prepare for merge",
+        "agents": ["release"],
+        "required_outputs": ["pr_summary", "merge_checklist"],
+        "dependencies": ["documentation"],
+        "approval_required": true
+      }
+    ]
+  },
+  "current_phase": "delivery",
+  "completed_phases": ["intake", "discovery", "planning", "design", "ticketing", "implementation", "validation", "documentation"],
+  "pending_phases": [],
+  "artifact_registry": {
+    "feature_brief": {
+      "id": "feature_brief",
+      "path": "artifacts/feature-brief.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T12:00:00.000Z",
+      "produced_by_phase": "intake"
+    },
+    "discovery_report": {
+      "id": "discovery_report",
+      "path": "artifacts/discovery-report.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T12:30:00.000Z",
+      "produced_by_phase": "discovery"
+    },
+    "assumptions_log": {
+      "id": "assumptions_log",
+      "path": "artifacts/assumptions-log.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T12:31:00.000Z",
+      "produced_by_phase": "discovery"
+    },
+    "dependency_map": {
+      "id": "dependency_map",
+      "path": "artifacts/dependency-map.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T12:32:00.000Z",
+      "produced_by_phase": "discovery"
+    },
+    "acceptance_criteria": {
+      "id": "acceptance_criteria",
+      "path": "artifacts/acceptance-criteria.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T13:00:00.000Z",
+      "produced_by_phase": "planning"
+    },
+    "task_plan": {
+      "id": "task_plan",
+      "path": "artifacts/task-plan.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T13:05:00.000Z",
+      "produced_by_phase": "planning"
+    },
+    "technical_design": {
+      "id": "technical_design",
+      "path": "artifacts/technical-design.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T14:00:00.000Z",
+      "produced_by_phase": "design"
+    },
+    "adr": {
+      "id": "adr",
+      "path": "artifacts/adr.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T14:10:00.000Z",
+      "produced_by_phase": "design"
+    },
+    "risk_report": {
+      "id": "risk_report",
+      "path": "artifacts/risk-report.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T14:15:00.000Z",
+      "produced_by_phase": "design"
+    },
+    "jira_mapping": {
+      "id": "jira_mapping",
+      "path": "artifacts/jira-mapping.json",
+      "media_type": "application/json",
+      "created_at": "2026-04-17T15:00:00.000Z",
+      "produced_by_phase": "ticketing"
+    },
+    "code_changes": {
+      "id": "code_changes",
+      "path": "artifacts/code-changes.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T15:30:00.000Z",
+      "produced_by_phase": "implementation"
+    },
+    "tests_added": {
+      "id": "tests_added",
+      "path": "artifacts/tests-added.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T15:35:00.000Z",
+      "produced_by_phase": "implementation"
+    },
+    "review_report": {
+      "id": "review_report",
+      "path": "artifacts/review-report.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T16:00:00.000Z",
+      "produced_by_phase": "validation"
+    },
+    "qa_report": {
+      "id": "qa_report",
+      "path": "artifacts/qa-report.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T16:10:00.000Z",
+      "produced_by_phase": "validation"
+    },
+    "validation_status": {
+      "id": "validation_status",
+      "path": "artifacts/validation-status.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T16:20:00.000Z",
+      "produced_by_phase": "validation"
+    },
+    "pr_summary": {
+      "id": "pr_summary",
+      "path": "artifacts/pr-summary.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T17:00:00.000Z",
+      "produced_by_phase": "delivery"
+    },
+    "docs_update_report": {
+      "id": "docs_update_report",
+      "path": "artifacts/docs-update-report.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T16:50:00.000Z",
+      "produced_by_phase": "documentation"
+    },
+    "release_notes_draft": {
+      "id": "release_notes_draft",
+      "path": "artifacts/release-notes-draft.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T17:05:00.000Z",
+      "produced_by_phase": "documentation"
+    },
+    "merge_checklist": {
+      "id": "merge_checklist",
+      "path": "artifacts/merge-checklist.md",
+      "media_type": "text/markdown",
+      "created_at": "2026-04-17T17:10:00.000Z",
+      "produced_by_phase": "delivery"
+    }
+  },
+  "agent_executions": [],
+  "hook_executions": [
+    {
+      "id": "load-repo-context",
+      "trigger": "before_run",
+      "status": "completed"
+    },
+    {
+      "id": "run-validation-commands",
+      "trigger": "after_phase",
+      "phase": "implementation",
+      "status": "pending"
+    }
+  ],
+  "policy_decisions": [
+    {
+      "allowed": true,
+      "reasons": []
+    }
+  ],
+  "approvals": {
+    "planning": {
+      "phase_id": "planning",
+      "approved_by": "product-owner",
+      "approved_at": "2026-04-17T13:20:00.000Z",
+      "note": "Criteria match admin workflow."
+    },
+    "design": {
+      "phase_id": "design",
+      "approved_by": "tech-lead",
+      "approved_at": "2026-04-17T14:30:00.000Z",
+      "note": "Reuse existing reassignment path."
+    }
+  },
+  "tool_writes": [],
+  "connector_write_previews": [
+    {
+      "connector_id": "jira",
+      "operation": "create",
+      "target": "bulk-reassignment-ticket-preview",
+      "idempotency_key": "run-2026-04-17-bulk-case-reassignment-by-region:jira:preview",
+      "preview_path": "outputs/previews/jira.preview.json",
+      "created_at": "2026-04-17T15:00:00.000Z"
+    },
+    {
+      "connector_id": "confluence",
+      "operation": "update",
+      "target": "admin-operations-page-preview",
+      "idempotency_key": "run-2026-04-17-bulk-case-reassignment-by-region:confluence:preview",
+      "preview_path": "outputs/previews/confluence.preview.md",
+      "created_at": "2026-04-17T15:05:00.000Z"
+    }
+  ],
+  "logs": [
+    {
+      "at": "2026-04-17T12:00:00.000Z",
+      "level": "info",
+      "message": "Feature run started"
+    }
+  ],
+  "unresolved_assumptions": ["Exact audit log retention requirement is unknown."],
+  "unresolved_risks": ["Bulk reassignment may create audit-log volume spikes."],
+  "created_at": "2026-04-17T12:00:00.000Z",
+  "updated_at": "2026-04-17T17:05:00.000Z"
+}

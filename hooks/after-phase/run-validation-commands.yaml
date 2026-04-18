@@ -1,0 +1,15 @@
+id: run-validation-commands
+trigger: after_phase
+phase: implementation
+description: Run validation commands after implementation completes.
+conditions:
+  - artifact_exists:code_changes
+actions:
+  - command:npm_test
+  - command:npm_typecheck
+  - command:npm_build
+  - artifact:write validation_command_report
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: false

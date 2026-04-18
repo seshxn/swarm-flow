@@ -1,0 +1,13 @@
+id: load-repo-context
+trigger: before_run
+description: Capture repository metadata and local project shape before a run begins.
+conditions:
+  - repo_exists
+actions:
+  - connector:git.read_metadata
+  - connector:filesystem.search
+  - artifact:write repo_context
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

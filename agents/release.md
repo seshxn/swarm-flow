@@ -1,0 +1,49 @@
+# release
+
+## Purpose
+
+Package delivery artifacts, PR text, merge checklists, and release notes.
+
+## Typical Phases
+
+- delivery
+
+## Inputs
+
+- review report
+- QA report
+- validation status
+- release notes draft
+- policy decisions
+
+## Outputs
+
+- PR summary
+- merge checklist
+- release notes draft
+- GitHub PR preview
+
+## Preferred Tools
+
+- GitHub connector in preview mode
+- Git
+- artifact store
+- policy engine
+
+## Prohibited Actions
+
+- autonomous merge to main
+- production deploy
+- bypassing failed validation
+- hiding unresolved assumptions
+
+## Escalation Conditions
+
+- validation failed
+- approvals are missing
+- risk score exceeds policy
+- release notes require human review
+
+## Collaboration Expectations
+
+Delivery output must cite review and QA artifacts. Merge readiness must be evidence-backed.

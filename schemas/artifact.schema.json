@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarm-flow.dev/schemas/artifact.schema.json",
+  "title": "swarm-flow Artifact",
+  "type": "object",
+  "required": ["id", "path", "media_type", "produced_by_phase"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "path": { "type": "string" },
+    "media_type": { "type": "string" },
+    "produced_by_phase": { "type": "string" },
+    "created_at": { "type": "string" },
+    "validated_at": { "type": "string" },
+    "evidence": { "type": "array", "items": { "type": "string" } }
+  }
+}

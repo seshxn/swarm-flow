@@ -1,0 +1,56 @@
+id: bugfix-fastlane
+name: Bugfix Fastlane
+description: Lightweight governed flow for reproducing, fixing, and validating a bug.
+phases:
+  - id: intake
+    description: Capture the bug report, impact, and reproduction clues
+    purpose: Turn a bug report into a bounded remediation target.
+    agents: [pm]
+    required_outputs: [bug_brief]
+    transition_conditions:
+      - bug_brief names impact, affected users, and reproduction clues
+
+  - id: reproduce
+    description: Reproduce the failure and capture evidence
+    purpose: Prove the bug exists before planning a fix.
+    agents: [scout, qa]
+    required_outputs: [reproduction_report, failing_test]
+    dependencies: [intake]
+    transition_conditions:
+      - failing_test fails for the expected reason
+      - reproduction_report includes environment and observed behavior
+
+  - id: fix_plan
+    description: Identify root cause and define a minimal fix
+    purpose: Choose the smallest defensible repair.
+    agents: [architect, implementer]
+    required_outputs: [root_cause_summary, fix_plan]
+    dependencies: [reproduce]
+    approval_required: true
+    transition_conditions:
+      - root_cause_summary cites evidence
+      - fix_plan includes regression validation
+
+  - id: implementation
+    description: Apply the fix and preserve the regression test
+    purpose: Repair the bug without broadening scope.
+    agents: [implementer]
+    required_outputs: [code_changes, tests_added]
+    dependencies: [fix_plan]
+
+  - id: validation
+    description: Run regression and risk checks
+    purpose: Prove the bug is fixed and adjacent behavior still works.
+    agents: [reviewer, qa]
+    required_outputs: [review_report, qa_report, validation_status]
+    dependencies: [implementation]
+    hooks:
+      before: [run_lint, run_typecheck, run_tests]
+
+  - id: delivery
+    description: Prepare PR and release notes
+    purpose: Package remediation evidence for review.
+    agents: [release]
+    required_outputs: [pr_summary, release_notes_draft]
+    dependencies: [validation]
+    approval_required: true

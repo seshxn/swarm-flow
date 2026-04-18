@@ -1,0 +1,21 @@
+{
+  "name": "swarm-flow-marketplace",
+  "description": "Marketplace metadata for installing swarm-flow as a Claude Code plugin.",
+  "owner": {
+    "name": "seshxn"
+  },
+  "plugins": [
+    {
+      "name": "swarm-flow",
+      "description": "Governed, artifact-driven SDLC orchestration for Claude Code.",
+      "version": "0.1.0",
+      "source": {
+        "source": "github",
+        "repo": "seshxn/swarm-flow"
+      },
+      "author": {
+        "name": "seshxn"
+      }
+    }
+  ]
+}

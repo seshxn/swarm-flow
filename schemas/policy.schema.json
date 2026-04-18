@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarm-flow.dev/schemas/policy.schema.json",
+  "title": "swarm-flow Policy",
+  "type": "object",
+  "required": ["id"],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "phase_entry_requires_artifacts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "approval_required_phases": { "type": "array", "items": { "type": "string" } },
+    "phase_completion_requires_registered_artifacts": { "type": "boolean" },
+    "external_writes_require_preview": { "type": "boolean" },
+    "allowed_external_write_connectors": { "type": "array", "items": { "type": "string" } },
+    "block_delivery_when_validation_failed": { "type": "boolean" },
+    "risk_score_approval_threshold": { "type": "number" },
+    "delivery_readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requires_validation_status": { "type": "string" },
+        "requires_review_report": { "type": "boolean" },
+        "requires_qa_report": { "type": "boolean" },
+        "requires_release_notes": { "type": "boolean" },
+        "requires_risk_approval_when_threshold_exceeded": { "type": "boolean" }
+      }
+    },
+    "blocked_without_approval": { "type": "array", "items": { "type": "string" } }
+  }
+}

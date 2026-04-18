@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarm-flow.dev/schemas/run.schema.json",
+  "title": "swarm-flow Run",
+  "type": "object",
+  "required": [
+    "id",
+    "repo",
+    "feature",
+    "flow_id",
+    "current_phase",
+    "completed_phases",
+    "pending_phases",
+    "artifact_registry",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string" },
+    "repo": { "type": "object" },
+    "feature": {
+      "type": "object",
+      "required": ["title", "goal"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "goal": { "type": "string" }
+      }
+    },
+    "flow_id": { "type": "string" },
+    "current_phase": { "type": "string" },
+    "completed_phases": { "type": "array", "items": { "type": "string" } },
+    "pending_phases": { "type": "array", "items": { "type": "string" } },
+    "artifact_registry": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/artifactRegistryEntry" }
+    },
+    "approvals": { "type": "object" },
+    "policy_decisions": { "type": "array" },
+    "hook_executions": { "type": "array" },
+    "connector_write_previews": { "type": "array" },
+    "logs": { "type": "array" },
+    "unresolved_assumptions": { "type": "array", "items": { "type": "string" } },
+    "unresolved_risks": { "type": "array", "items": { "type": "string" } },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" }
+  },
+  "$defs": {
+    "artifactRegistryEntry": {
+      "type": "object",
+      "required": ["id", "path", "media_type", "created_at", "produced_by_phase"],
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" },
+        "media_type": { "type": "string" },
+        "created_at": { "type": "string" },
+        "produced_by_phase": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mode": "preview",
+  "target": "jira",
+  "idempotencyKey": "run-2026-04-17-bulk-case-reassignment-by-region:jira:preview",
+  "operations": [
+    {
+      "type": "create_or_update",
+      "summary": "Implement bulk case reassignment by region",
+      "labels": ["swarm-flow", "feature-default"]
+    }
+  ]
+}

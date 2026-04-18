@@ -1,0 +1,30 @@
+id: default
+name: Default Governed Delivery
+description: Balanced policy for local feature delivery with human review at planning, design, and delivery.
+phase_entry_requires_artifacts:
+  planning: [feature_brief, discovery_report]
+  design: [acceptance_criteria, task_plan]
+  ticketing: [technical_design, adr]
+  implementation: [acceptance_criteria, task_plan]
+  delivery: [review_report, qa_report, validation_status]
+approval_required_phases:
+  - planning
+  - design
+  - delivery
+phase_completion_requires_registered_artifacts: true
+external_writes_require_preview: true
+allowed_external_write_connectors:
+  - jira
+  - confluence
+  - github
+block_delivery_when_validation_failed: true
+risk_score_approval_threshold: 7
+delivery_readiness:
+  requires_validation_status: passed
+  requires_review_report: true
+  requires_qa_report: true
+  requires_release_notes: true
+blocked_without_approval:
+  - high_risk_design_change
+  - external_write_execution
+  - merge_readiness

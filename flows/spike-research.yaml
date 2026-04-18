@@ -1,0 +1,31 @@
+id: spike-research
+name: Research Spike
+description: Time-boxed flow for reducing uncertainty before implementation.
+phases:
+  - id: intake
+    description: Define the research question and decision needed
+    purpose: Bound the spike around a decision, not open-ended curiosity.
+    agents: [pm]
+    required_outputs: [spike_brief]
+
+  - id: discovery
+    description: Gather sources, repo context, and alternatives
+    purpose: Collect enough evidence to compare options.
+    agents: [scout]
+    required_outputs: [research_notes, assumptions_log]
+    dependencies: [intake]
+
+  - id: analysis
+    description: Compare options and tradeoffs
+    purpose: Produce a recommendation with known uncertainty.
+    agents: [architect]
+    required_outputs: [tradeoff_matrix, recommendation]
+    dependencies: [discovery]
+
+  - id: decision
+    description: Produce a decision artifact and next-step plan
+    purpose: Convert research into an ADR or implementation plan.
+    agents: [architect, pm]
+    required_outputs: [adr, next_steps]
+    dependencies: [analysis]
+    approval_required: true

@@ -1,0 +1,22 @@
+id: local-dev
+name: Local Development
+description: Lightweight local policy for experimentation while preserving preview-first external writes.
+phase_entry_requires_artifacts:
+  implementation: [task_plan]
+  delivery: [validation_status]
+approval_required_phases:
+  - delivery
+phase_completion_requires_registered_artifacts: true
+external_writes_require_preview: true
+allowed_external_write_connectors:
+  - filesystem
+  - github
+block_delivery_when_validation_failed: true
+risk_score_approval_threshold: 9
+delivery_readiness:
+  requires_validation_status: passed
+  requires_review_report: false
+  requires_qa_report: false
+  requires_release_notes: false
+blocked_without_approval:
+  - external_write_execution

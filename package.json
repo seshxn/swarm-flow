@@ -1,0 +1,36 @@
+{
+  "name": "swarm-flow",
+  "version": "0.1.0",
+  "description": "AI-native software delivery engine for governed, artifact-driven SDLC flows.",
+  "type": "module",
+  "packageManager": "npm@10.9.3",
+  "private": false,
+  "workspaces": [
+    "packages/*"
+  ],
+  "bin": {
+    "swarm-flow": "packages/cli/dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b packages/core packages/connectors packages/runtime packages/adapters packages/sdk packages/cli",
+    "typecheck": "tsc -b packages/core packages/connectors packages/runtime packages/adapters packages/sdk packages/cli --pretty false",
+    "test": "vitest run",
+    "verify": "npm test && npm run typecheck && npm run build",
+    "test:watch": "vitest",
+    "clean": "rm -rf packages/*/dist"
+  },
+  "keywords": [
+    "ai-agents",
+    "software-delivery",
+    "workflow",
+    "sdlc",
+    "orchestration"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

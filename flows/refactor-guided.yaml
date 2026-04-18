@@ -1,0 +1,48 @@
+id: refactor-guided
+name: Guided Refactor
+description: Governed flow for behavior-preserving structural improvements.
+phases:
+  - id: intake
+    description: Define the refactor target and constraints
+    purpose: Define the behavior-preserving boundary.
+    agents: [pm, architect]
+    required_outputs: [refactor_brief]
+
+  - id: discovery
+    description: Map affected modules, tests, and public contracts
+    purpose: Understand coupling before structural changes.
+    agents: [scout, architect]
+    required_outputs: [impact_map, contract_inventory, risk_report]
+    dependencies: [intake]
+
+  - id: planning
+    description: Slice the refactor into reversible steps
+    purpose: Preserve behavior through small reversible changes.
+    agents: [architect]
+    required_outputs: [task_plan, validation_plan]
+    dependencies: [discovery]
+    approval_required: true
+
+  - id: implementation
+    description: Execute behavior-preserving slices
+    purpose: Change structure without changing public behavior.
+    agents: [implementer]
+    required_outputs: [code_changes, tests_updated]
+    dependencies: [planning]
+
+  - id: validation
+    description: Prove behavior is preserved
+    purpose: Compare baseline and post-change behavior.
+    agents: [reviewer, qa]
+    required_outputs: [review_report, qa_report, validation_status]
+    dependencies: [implementation]
+    hooks:
+      before: [run_lint, run_typecheck, run_tests]
+
+  - id: delivery
+    description: Package refactor evidence for review
+    purpose: Make a behavior-preserving change reviewable.
+    agents: [release]
+    required_outputs: [pr_summary, merge_checklist]
+    dependencies: [validation]
+    approval_required: true

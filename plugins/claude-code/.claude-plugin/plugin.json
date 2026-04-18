@@ -1,0 +1,19 @@
+{
+  "name": "swarm-flow",
+  "description": "Claude Code commands for governed, artifact-driven SDLC runs with the swarm-flow CLI.",
+  "version": "0.1.0",
+  "author": {
+    "name": "seshxn"
+  },
+  "homepage": "https://github.com/seshxn/swarm-flow",
+  "repository": "https://github.com/seshxn/swarm-flow",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "agents",
+    "workflow",
+    "artifacts",
+    "governance"
+  ],
+  "commands": "./.claude/commands"
+}

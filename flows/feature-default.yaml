@@ -1,0 +1,136 @@
+id: feature-default
+name: Feature Delivery
+description: Standard governed flow for taking a feature from idea to shipped change.
+phases:
+  - id: intake
+    description: Normalize the feature request
+    purpose: Turn a raw request into a durable feature brief and assumptions log.
+    agents: [pm]
+    required_outputs: [feature_brief]
+    transition_conditions:
+      - feature_brief is registered
+      - unresolved high-risk assumptions are marked
+    output_expectations:
+      feature_brief: Includes goal, users, scope, non-goals, constraints, and unknowns.
+    hooks:
+      before: [load_project_context]
+      after: [persist_artifacts]
+
+  - id: discovery
+    description: Gather repo, Jira, docs, and system context
+    purpose: Ground planning in repository and tool evidence.
+    agents: [scout]
+    required_outputs: [discovery_report, assumptions_log, dependency_map]
+    dependencies: [intake]
+    transition_conditions:
+      - discovery_report cites files, tickets, docs, or commands
+      - assumptions_log separates facts from inferred claims
+    output_expectations:
+      discovery_report: Cites concrete source paths and relevant external context.
+      assumptions_log: Names unresolved questions and risk level.
+      dependency_map: Names likely affected modules and external dependencies.
+    hooks:
+      before: [read_repo, read_jira, read_confluence]
+      after: [risk_scan]
+
+  - id: planning
+    description: Define scope and acceptance criteria
+    purpose: Convert evidence into testable scope and implementable slices.
+    agents: [pm, architect]
+    required_outputs: [acceptance_criteria, task_plan]
+    dependencies: [discovery]
+    approval_required: true
+    transition_conditions:
+      - acceptance_criteria map to feature goal
+      - task_plan includes validation work
+      - human approval is recorded
+    output_expectations:
+      acceptance_criteria: Testable criteria covering happy path, permissions, edge cases, and failure behavior.
+      task_plan: Ordered implementation slices with dependencies and validation evidence.
+    risk_escalation:
+      - acceptance criteria require data migration or permission changes
+
+  - id: design
+    description: Produce technical design and tradeoffs
+    purpose: Make architecture, data flow, tradeoffs, and rollback posture explicit.
+    agents: [architect]
+    required_outputs: [technical_design, adr, risk_report]
+    dependencies: [planning]
+    approval_required: true
+    transition_conditions:
+      - technical_design maps to acceptance criteria
+      - adr records consequential decisions
+      - risk_report has mitigation for high risks
+    output_expectations:
+      technical_design: Describes module changes, data flow, validation, and rollback.
+      adr: Records one important decision and consequences.
+      risk_report: Names impact, likelihood, mitigation, and required approvals.
+
+  - id: ticketing
+    description: Create or update delivery work items
+    purpose: Prepare external delivery tracking without noisy writes.
+    agents: [pm]
+    required_outputs: [jira_mapping]
+    dependencies: [planning, design]
+    transition_conditions:
+      - jira_mapping is previewed before write
+      - idempotency keys are present for each external operation
+    output_expectations:
+      jira_mapping: Contains issue previews, update-vs-create intent, labels, and idempotency keys.
+    hooks:
+      after: [sync_jira, sync_confluence]
+
+  - id: implementation
+    description: Execute code changes on a working branch
+    purpose: Make scoped changes in evidence-backed slices.
+    agents: [implementer]
+    required_outputs: [code_changes, tests_added]
+    dependencies: [ticketing]
+    transition_conditions:
+      - code_changes map to task_plan
+      - tests_added or test rationale is registered
+    output_expectations:
+      code_changes: Summarizes changed files, decisions, and implementation notes.
+      tests_added: Records red/green or validation evidence.
+
+  - id: validation
+    description: Review, test, and assess risk
+    purpose: Prove the change is ready for delivery or open a repair loop.
+    agents: [reviewer, qa]
+    required_outputs: [review_report, qa_report, validation_status]
+    dependencies: [implementation]
+    transition_conditions:
+      - validation_status is passing or repair loop is opened
+      - review_report has no unresolved blockers
+      - qa_report maps to acceptance criteria
+    output_expectations:
+      review_report: Lists findings by severity with evidence.
+      qa_report: Maps criteria and edge cases to test evidence.
+      validation_status: Captures commands, exit codes, and residual risk.
+    hooks:
+      before: [run_lint, run_typecheck, run_tests]
+
+  - id: documentation
+    description: Update docs and delivery notes
+    purpose: Keep durable knowledge aligned with shipped behavior.
+    agents: [docs]
+    required_outputs: [docs_update_report, release_notes_draft]
+    dependencies: [validation]
+    transition_conditions:
+      - docs_update_report names updated or intentionally skipped docs
+      - release_notes_draft reflects implemented behavior
+
+  - id: delivery
+    description: Open PR and prepare for merge
+    purpose: Package evidence for human review and merge readiness.
+    agents: [release]
+    required_outputs: [pr_summary, merge_checklist]
+    dependencies: [documentation]
+    approval_required: true
+    transition_conditions:
+      - validation passed
+      - required approvals are recorded
+      - external writes are previewed
+    output_expectations:
+      pr_summary: Summarizes change, evidence, risk, and rollout notes.
+      merge_checklist: States gate status, unresolved assumptions, and rollback readiness.

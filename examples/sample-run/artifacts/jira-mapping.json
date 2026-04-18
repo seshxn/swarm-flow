@@ -1,0 +1,16 @@
+{
+  "mode": "preview",
+  "idempotencyKey": "run-2026-04-17-bulk-case-reassignment-by-region:jira:preview",
+  "issues": [
+    {
+      "operation": "create",
+      "type": "Story",
+      "summary": "Bulk case reassignment by region",
+      "acceptanceCriteria": [
+        "Admins can reassign open cases by region.",
+        "Unauthorized actors are denied.",
+        "Audit events are recorded per reassigned case."
+      ]
+    }
+  ]
+}

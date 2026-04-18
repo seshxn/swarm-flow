@@ -1,0 +1,19 @@
+{
+  "defaultFlow": "feature-default",
+  "defaultPolicy": "default",
+  "runsDirectory": ".runs",
+  "externalWrites": {
+    "previewByDefault": true
+  },
+  "connectors": {
+    "jira": {
+      "mode": "preview"
+    },
+    "confluence": {
+      "mode": "preview"
+    },
+    "github": {
+      "mode": "preview"
+    }
+  }
+}

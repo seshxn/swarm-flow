@@ -1,0 +1,12 @@
+id: draft-pr-body
+trigger: on_pr_open
+description: Keep PR summary aligned with review and QA evidence.
+conditions:
+  - artifact_exists:pr_summary
+actions:
+  - connector:github.preview_pr_update
+  - artifact:write pr_update_preview
+  - log:event
+safety:
+  external_writes: preview_only
+  retry_safe: true

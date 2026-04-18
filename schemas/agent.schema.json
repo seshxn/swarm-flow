@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarm-flow.dev/schemas/agent.schema.json",
+  "title": "swarm-flow Agent",
+  "type": "object",
+  "required": [
+    "id",
+    "purpose",
+    "typical_phases",
+    "inputs",
+    "outputs",
+    "preferred_tools",
+    "prohibited_actions",
+    "escalation_conditions",
+    "collaboration_expectations"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "purpose": { "type": "string" },
+    "typical_phases": { "type": "array", "items": { "type": "string" } },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "outputs": { "type": "array", "items": { "type": "string" } },
+    "preferred_tools": { "type": "array", "items": { "type": "string" } },
+    "prohibited_actions": { "type": "array", "items": { "type": "string" } },
+    "escalation_conditions": { "type": "array", "items": { "type": "string" } },
+    "collaboration_expectations": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,37 @@
+id: strict-enterprise
+name: Strict Enterprise
+description: High-control policy for teams that require approvals before risky transitions and external coordination.
+phase_entry_requires_artifacts:
+  discovery: [feature_brief]
+  planning: [feature_brief, discovery_report, assumptions_log, dependency_map]
+  design: [acceptance_criteria, task_plan]
+  ticketing: [technical_design, adr, risk_report]
+  implementation: [acceptance_criteria, task_plan, technical_design]
+  validation: [code_changes, tests_added]
+  delivery: [review_report, qa_report, validation_status, release_notes_draft]
+approval_required_phases:
+  - planning
+  - design
+  - ticketing
+  - implementation
+  - delivery
+phase_completion_requires_registered_artifacts: true
+external_writes_require_preview: true
+allowed_external_write_connectors:
+  - jira
+  - confluence
+  - github
+block_delivery_when_validation_failed: true
+risk_score_approval_threshold: 4
+delivery_readiness:
+  requires_validation_status: passed
+  requires_review_report: true
+  requires_qa_report: true
+  requires_release_notes: true
+  requires_risk_approval_when_threshold_exceeded: true
+blocked_without_approval:
+  - implementation_entry
+  - external_write_execution
+  - confluence_update
+  - github_pr_ready
+  - merge_readiness

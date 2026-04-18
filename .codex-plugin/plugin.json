@@ -1,0 +1,39 @@
+{
+  "name": "swarm-flow",
+  "version": "0.1.0",
+  "description": "Codex skill plugin for governed, artifact-driven SDLC orchestration with the swarm-flow CLI.",
+  "author": {
+    "name": "seshxn",
+    "url": "https://github.com/seshxn/swarm-flow"
+  },
+  "homepage": "https://github.com/seshxn/swarm-flow",
+  "repository": "https://github.com/seshxn/swarm-flow",
+  "license": "MIT",
+  "keywords": [
+    "sdlc",
+    "agents",
+    "artifacts",
+    "workflow",
+    "governance"
+  ],
+  "skills": "./plugins/codex/skills/",
+  "interface": {
+    "displayName": "swarm-flow",
+    "shortDescription": "Governed SDLC runs for Codex.",
+    "longDescription": "Use swarm-flow from Codex to start, resume, inspect, approve, and preview artifact-driven software delivery runs.",
+    "developerName": "seshxn",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/seshxn/swarm-flow",
+    "termsOfServiceURL": "https://github.com/seshxn/swarm-flow/blob/main/LICENSE",
+    "defaultPrompt": [
+      "Start a governed feature run",
+      "Resume the current swarm-flow run",
+      "Preview Jira changes safely"
+    ],
+    "brandColor": "#2563EB"
+  }
+}

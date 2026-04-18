@@ -1,0 +1,48 @@
+id: incident-remediation
+name: Incident Remediation
+description: Governed flow for remediation after a production incident.
+phases:
+  - id: intake
+    description: Capture incident impact, timeline, and current mitigation
+    purpose: Establish incident scope and urgency.
+    agents: [pm]
+    required_outputs: [incident_brief]
+
+  - id: triage
+    description: Gather logs, alerts, and affected systems
+    purpose: Ground remediation in observed failure evidence.
+    agents: [scout, qa]
+    required_outputs: [triage_report, assumptions_log]
+    dependencies: [intake]
+
+  - id: remediation_plan
+    description: Identify fix, rollback, and validation strategy
+    purpose: Define safe repair and rollback options.
+    agents: [architect, implementer]
+    required_outputs: [remediation_plan, risk_report]
+    dependencies: [triage]
+    approval_required: true
+
+  - id: implementation
+    description: Apply the remediation change
+    purpose: Apply the smallest safe change that addresses the incident.
+    agents: [implementer]
+    required_outputs: [code_changes, tests_added]
+    dependencies: [remediation_plan]
+
+  - id: validation
+    description: Validate the incident symptom and regression coverage
+    purpose: Prove the symptom is resolved and did not regress adjacent behavior.
+    agents: [reviewer, qa]
+    required_outputs: [review_report, qa_report, validation_status]
+    dependencies: [implementation]
+    hooks:
+      before: [run_lint, run_typecheck, run_tests]
+
+  - id: delivery
+    description: Prepare delivery and post-incident follow-up
+    purpose: Package remediation evidence and follow-up actions.
+    agents: [release, docs]
+    required_outputs: [pr_summary, post_incident_followup]
+    dependencies: [validation]
+    approval_required: true

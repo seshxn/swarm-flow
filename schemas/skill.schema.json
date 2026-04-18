@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://swarm-flow.dev/schemas/skill.schema.json",
+  "title": "swarm-flow Skill",
+  "type": "object",
+  "required": ["id", "title", "phase", "inputs", "outputs"],
+  "additionalProperties": true,
+  "properties": {
+    "id": { "type": "string" },
+    "title": { "type": "string" },
+    "phase": { "type": "string" },
+    "triggers": { "type": "array", "items": { "type": "string" } },
+    "inputs": { "type": "array", "items": { "type": "string" } },
+    "outputs": { "type": "array", "items": { "type": "string" } }
+  }
+}

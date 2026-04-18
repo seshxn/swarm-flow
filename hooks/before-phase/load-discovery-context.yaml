@@ -1,0 +1,15 @@
+id: load-discovery-context
+trigger: before_phase
+phase: discovery
+description: Load local and planning context before discovery work begins.
+conditions:
+  - artifact_exists:feature_brief
+actions:
+  - connector:filesystem.search
+  - connector:jira.search
+  - connector:confluence.search
+  - artifact:write discovery_context
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

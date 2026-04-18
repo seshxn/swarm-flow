@@ -1,0 +1,12 @@
+id: persist-artifacts
+trigger: after_phase
+description: Validate and persist required phase artifacts after each phase.
+conditions:
+  - required_outputs_present
+actions:
+  - artifact:validate
+  - run_state:update
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true
