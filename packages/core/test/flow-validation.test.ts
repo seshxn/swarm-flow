@@ -29,6 +29,27 @@ describe("validateFlow", () => {
     expect(result.flow?.phases.map((phase) => phase.id)).toEqual(["intake", "planning"]);
   });
 
+  it("accepts optional agents and outputs without making them required", () => {
+    const result = validateFlow({
+      id: "feature-default",
+      name: "Feature Delivery",
+      phases: [
+        {
+          id: "validation",
+          description: "Review and test the change",
+          agents: ["reviewer", "qa"],
+          optional_agents: ["security-auditor"],
+          required_outputs: ["review_report", "qa_report"],
+          optional_outputs: ["security_review"]
+        }
+      ]
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.flow?.phases[0]?.optional_agents).toEqual(["security-auditor"]);
+    expect(result.flow?.phases[0]?.optional_outputs).toEqual(["security_review"]);
+  });
+
   it("rejects flows with unknown phase dependencies", () => {
     const result = validateFlow({
       id: "broken",

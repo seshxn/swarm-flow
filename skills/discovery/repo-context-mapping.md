@@ -26,6 +26,26 @@ Do not use as a replacement for design. This skill gathers evidence; it does not
 - Feature brief exists.
 - Repository files are readable.
 
+# Process
+
+```
+Read feature brief
+        ↓
+Inspect project structure (top-level, then targeted)
+        ↓
+Identify: package manager, build tool, test command, CI config
+        ↓
+Map modules likely affected by the request
+        ↓
+Record public interfaces and integration boundaries
+        ↓
+Every claim must cite a file path or command output
+        ↓
+Open questions → copy to assumptions log
+        ↓
+Register discovery_report + dependency_map
+```
+
 # Exact steps
 
 1. Inspect top-level project structure.
@@ -38,8 +58,10 @@ Do not use as a replacement for design. This skill gathers evidence; it does not
 
 | Shortcut | Reality |
 | --- | --- |
-| "I know this stack." | This repository may use nonstandard conventions. |
-| "Search results are enough." | Discovery needs cited files and interpretation. |
+| "I know this stack." | This repository may use nonstandard conventions. Read the actual files. |
+| "Search results are enough." | Discovery needs cited files and interpretation, not result counts. |
+| "I'll note assumptions in the design." | Assumptions belong in the assumptions log, not deferred to design. |
+| "The dependency map is obvious." | Obvious maps are still required — they catch surprises and drive planning. |
 
 # Verification
 

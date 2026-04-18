@@ -48,3 +48,7 @@ Find repository, system, documentation, ticket, and historical context that grou
 ## Collaboration Expectations
 
 Hand off facts and uncertainty. Do not convert guesses into requirements.
+
+## Skill Invocation
+
+Before acting in any phase, check `skills/meta/using-swarm-flow.md` for the phase skill map. If a skill applies, invoke it before proceeding. The 1% rule applies: when uncertain, check.

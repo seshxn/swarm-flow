@@ -28,6 +28,35 @@ Do not use to bypass failed validation or missing approval.
 - QA report exists.
 - Validation status exists.
 
+# Process
+
+```
+Collect: review_report + qa_report + validation_status
+        ↓
+Check each gate: pass / fail / approved-exception
+        ↓
+Any failed gate? → block and explain; do not merge
+        ↓
+Confirm rollback posture for risky changes
+        ↓
+List unresolved assumptions from run.json
+        ↓
+Register merge_checklist with gate status table
+```
+
+# Checklist Gates
+
+| Gate | Required | Notes |
+|------|----------|-------|
+| Validation passed | Yes | Must cite command output |
+| Review: no unresolved Critical/Important findings | Yes | Or approved exception recorded |
+| QA: criteria mapped to evidence | Yes | |
+| Approvals recorded in run.json | Yes | For approval-required phases |
+| Release notes drafted | Yes | |
+| Rollback posture stated | Yes | For any risky or irreversible change |
+| Unresolved assumptions listed | Yes | Empty list is acceptable |
+| External writes previewed | Yes | No direct writes without preview |
+
 # Exact steps
 
 1. Confirm validation passed.
@@ -40,8 +69,10 @@ Do not use to bypass failed validation or missing approval.
 
 | Shortcut | Reality |
 | --- | --- |
-| "The maintainer can check it." | The flow should package evidence before handoff. |
-| "One failing check is unrelated." | Failed checks must be explained or repaired. |
+| "The maintainer can check it." | The flow must package evidence before handoff — not delegate it. |
+| "One failing check is unrelated." | Every failed check must be explained or repaired, not ignored. |
+| "Rollback is obvious." | Unstated rollback posture = no rollback plan. State it explicitly. |
+| "Approvals were given verbally." | Only approvals recorded in run.json count — chat is not durable. |
 
 # Verification
 

@@ -47,3 +47,7 @@ Validate acceptance criteria, edge cases, regression coverage, and user-visible 
 ## Collaboration Expectations
 
 QA evidence must map back to acceptance criteria or incident symptoms.
+
+## Skill Invocation
+
+Before acting in any phase, check `skills/meta/using-swarm-flow.md` for the phase skill map. If a skill applies, invoke it before proceeding. The 1% rule applies: when uncertain, check.

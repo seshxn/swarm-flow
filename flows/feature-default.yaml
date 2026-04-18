@@ -97,7 +97,9 @@ phases:
     description: Review, test, and assess risk
     purpose: Prove the change is ready for delivery or open a repair loop.
     agents: [reviewer, qa]
+    optional_agents: [security-auditor, test-engineer]
     required_outputs: [review_report, qa_report, validation_status]
+    optional_outputs: [security_review]
     dependencies: [implementation]
     transition_conditions:
       - validation_status is passing or repair loop is opened

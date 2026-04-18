@@ -27,20 +27,41 @@ Do not use for purely mechanical formatting or generated files.
 - Acceptance criteria or reproduction evidence exists.
 - Test command is known.
 
+# Process
+
+```
+Write smallest failing test
+        ↓
+Run test → confirm it fails for the expected reason
+  fails for wrong reason → revise test
+        ↓
+Implement minimum code to pass
+        ↓
+Run test → confirm it passes
+        ↓
+Run full regression suite
+  regressions? → fix before proceeding
+        ↓
+Record red and green evidence → register artifacts
+```
+
 # Exact steps
 
-1. Write the smallest test that expresses the desired behavior.
-2. Run it and confirm it fails for the expected reason.
-3. Implement the minimum code to pass.
-4. Run the test and relevant regression suite.
-5. Record red and green evidence.
+1. Write the smallest test that expresses the desired behavior — one assertion, one scenario.
+2. Run it and confirm it fails **for the expected reason** (not a syntax error or import failure).
+3. Implement the minimum code to make the test pass — no extra scope.
+4. Run the test again and confirm it is green.
+5. Run the full relevant regression suite.
+6. Record red (before) and green (after) command output as evidence.
 
 # Anti-rationalization checks
 
 | Shortcut | Reality |
 | --- | --- |
-| "I know the fix." | Knowing the fix does not prove the test guards it. |
-| "The test is too hard." | That signals design or observability risk. |
+| "I know the fix." | Knowing the fix does not prove the test guards it. Write the test first. |
+| "The test is too hard to write." | That signals design or observability risk — escalate, don't skip. |
+| "I'll write the test after to confirm." | A test written after the code always passes. It proves nothing. |
+| "No test framework exists." | A one-off script that demonstrates failure and success is sufficient evidence. |
 
 # Verification
 
