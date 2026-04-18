@@ -4,8 +4,11 @@ import type {
   ApprovalRecord,
   ArtifactRegistryEntry,
   ConnectorWritePreview,
+  ExternalPostingSelection,
   Flow,
   RunLogEntry,
+  RunScope,
+  RunTarget,
   RunState
 } from "@swarm-flow/core";
 import { validateFlow } from "@swarm-flow/core";
@@ -14,6 +17,8 @@ export type StartFeatureRunInput = {
   flow: unknown;
   title: string;
   goal: string;
+  scope?: RunScope;
+  target?: RunTarget;
   now?: Date;
 };
 
@@ -44,6 +49,10 @@ export type RecordConnectorPreviewInput = {
   target: string;
   idempotencyKey: string;
   previewPath: string;
+  now?: Date;
+};
+
+export type RecordExternalPostingSelectionInput = ExternalPostingSelection & {
   now?: Date;
 };
 
@@ -166,6 +175,10 @@ export class FlowRuntime {
       ],
       unresolved_assumptions: [],
       unresolved_risks: [],
+      scope: input.scope,
+      target: input.target,
+      external_comment_previews: [],
+      external_posting_selections: [],
       created_at: timestamp,
       updated_at: timestamp
     };
@@ -261,6 +274,32 @@ export class FlowRuntime {
           connector_id: input.connectorId,
           target: input.target,
           preview_path: input.previewPath
+        })
+      ],
+      updated_at: timestamp
+    };
+
+    await this.store.save(updated);
+    return updated;
+  }
+
+  async recordExternalPostingSelection(
+    runId: string,
+    input: RecordExternalPostingSelectionInput
+  ): Promise<RunState> {
+    const run = await this.store.load(runId);
+    const now = input.now ?? new Date();
+    const timestamp = now.toISOString();
+    const { now: _now, ...selection } = input;
+    const updated: RunState = {
+      ...run,
+      external_posting_selections: [...(run.external_posting_selections ?? []), selection],
+      logs: [
+        ...run.logs,
+        logEntry(timestamp, "info", "External posting selection recorded", {
+          target: selection.target,
+          selection_mode: selection.selection_mode,
+          selected_comment_ids: selection.selected_comment_ids
         })
       ],
       updated_at: timestamp

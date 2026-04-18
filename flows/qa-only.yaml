@@ -1,0 +1,57 @@
+id: qa-only
+name: QA Only
+description: Standalone QA swarm flow for a PR, ticket, deploy preview, local URL, or test target.
+phases:
+  - id: intake
+    description: Normalize QA target
+    purpose: Capture the QA target and any known acceptance criteria.
+    agents: [pm, qa]
+    required_outputs: [qa_target]
+    transition_conditions:
+      - qa_target identifies the target or missing target assumption
+
+  - id: load_target_context
+    description: Load target context
+    purpose: Gather PR, ticket, deploy, local app, docs, and test command context where available.
+    agents: [scout, qa]
+    required_outputs: [qa_context, assumptions_log]
+    dependencies: [intake]
+    transition_conditions:
+      - qa_context cites connector results, files, commands, URLs, or assumptions
+
+  - id: criteria_discovery
+    description: Discover acceptance criteria
+    purpose: Map explicit or inferred scope to testable QA evidence.
+    agents: [qa, pm]
+    required_outputs: [acceptance_matrix]
+    dependencies: [load_target_context]
+    transition_conditions:
+      - acceptance_matrix maps criteria to planned evidence or marks assumptions
+
+  - id: qa_swarm
+    description: Run multi-lens QA validation
+    purpose: Validate acceptance criteria, regressions, edge cases, and test gaps.
+    agents: [qa]
+    required_outputs: [qa_plan, exploratory_qa_report, regression_risk_report, test_gap_report, qa_report]
+    dependencies: [criteria_discovery]
+    transition_conditions:
+      - qa_report maps evidence to acceptance criteria or inferred scope
+      - high-risk gaps are blockers or require approval
+
+  - id: comment_selection
+    description: Select external QA comments
+    purpose: Let the user choose which proposed GitHub, Jira, or Slack updates to post.
+    agents: [release]
+    required_outputs: [external_posting_selection]
+    dependencies: [qa_swarm]
+    approval_required: true
+    transition_conditions:
+      - external comments are not posted automatically
+      - selected and skipped comment IDs are recorded
+
+  - id: delivery
+    description: Package QA evidence
+    purpose: Summarize QA outcome, gaps, selected comments, and residual risk.
+    agents: [release]
+    required_outputs: [validation_status]
+    dependencies: [comment_selection]

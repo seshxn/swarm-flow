@@ -19,6 +19,28 @@ Agents are temporary. Artifacts are durable.
 - `release-notes.md`
 - `pr-summary.md`
 
+## Managed Slice Artifacts
+
+Epic, review-only, and QA-only runs add artifacts that keep large AI-assisted delivery work reviewable:
+
+- `story-map.json`
+- `slice-plan.md`
+- `pr-size-assessment.md`
+- `qa-plan.md`
+- `acceptance-matrix.md`
+- `exploratory-qa-report.md`
+- `regression-risk-report.md`
+- `test-gap-report.md`
+- `github-comments.preview.json`
+- `jira-comments.preview.json`
+- `slack-update.preview.md`
+- `external-posting-selection.json`
+- `qa-swarm-report.md`
+- `review-swarm-report.md`
+- `delivery-package.md`
+
+These artifacts do not replace human judgment. They make scope, risk, proposed comments, selected comments, and residual gaps inspectable.
+
 ## Artifact Registry
 
 `run.json` tracks each artifact with:

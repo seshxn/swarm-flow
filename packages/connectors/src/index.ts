@@ -35,6 +35,19 @@ export type Connector<TRead = unknown, TSearch = unknown, TCreate = unknown, TUp
   validatePermissions(): Promise<{ ok: boolean; reasons: string[] }>;
 };
 
+export type ConnectorBackendKind =
+  | "preview"
+  | "atlassian_mcp"
+  | "github_plugin"
+  | "github_mcp"
+  | "gh_cli"
+  | "slack_mcp"
+  | "github_actions";
+
+export type ConnectorCapabilityRegistry = {
+  connectors: Record<string, ConnectorBackendKind[]>;
+};
+
 export type PreviewConnectorOptions = {
   id: string;
   readableName: string;
@@ -94,11 +107,32 @@ export function createConfluenceConnector(): Connector {
   });
 }
 
+export function createSlackConnector(): Connector {
+  return createPreviewConnector({
+    id: "slack",
+    readableName: "Slack"
+  });
+}
+
 export function createCiConnector(): Connector {
   return createPreviewConnector({
     id: "ci",
     readableName: "CI"
   });
+}
+
+export function discoverConnectorCapabilities(): ConnectorCapabilityRegistry {
+  return {
+    connectors: {
+      filesystem: ["preview"],
+      git: ["preview"],
+      github: ["github_plugin", "gh_cli", "preview"],
+      jira: ["atlassian_mcp", "preview"],
+      confluence: ["atlassian_mcp", "preview"],
+      slack: ["slack_mcp", "preview"],
+      ci: ["github_actions", "preview"]
+    }
+  };
 }
 
 function createPreviewConnector(options: PreviewConnectorOptions): Connector {

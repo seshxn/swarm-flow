@@ -33,6 +33,32 @@
         "requires_risk_approval_when_threshold_exceeded": { "type": "boolean" }
       }
     },
-    "blocked_without_approval": { "type": "array", "items": { "type": "string" } }
+    "blocked_without_approval": { "type": "array", "items": { "type": "string" } },
+    "manageable_pr_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_changed_files_warn": { "type": "number" },
+        "max_changed_files_block": { "type": "number" },
+        "max_changed_lines_warn": { "type": "number" },
+        "max_changed_lines_block": { "type": "number" },
+        "max_packages_warn": { "type": "number" },
+        "max_packages_block": { "type": "number" },
+        "block_mixed_migration_and_behavior_change": { "type": "boolean" },
+        "block_unrelated_concerns": { "type": "boolean" },
+        "require_slice_plan_before_implementation": { "type": "boolean" },
+        "allow_override_with_approval": { "type": "boolean" }
+      }
+    },
+    "external_comment_posting": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_mode", "require_user_selection", "allow_auto_post"],
+      "properties": {
+        "default_mode": { "const": "preview" },
+        "require_user_selection": { "type": "boolean" },
+        "allow_auto_post": { "type": "boolean" }
+      }
+    }
   }
 }

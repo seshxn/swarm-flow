@@ -1,0 +1,15 @@
+{
+  "runId": "run-2026-04-18-review-pr-123",
+  "mode": "preview",
+  "target": "https://github.com/org/repo/pull/123",
+  "comments": [
+    {
+      "id": "comment-1",
+      "connector_id": "github",
+      "type": "summary",
+      "severity": "info",
+      "body": "review-only report is available in this swarm-flow run.",
+      "recommended": true
+    }
+  ]
+}

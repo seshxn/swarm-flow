@@ -1,0 +1,48 @@
+id: review-only
+name: Review Only
+description: Standalone code review swarm flow for a GitHub pull request.
+phases:
+  - id: intake
+    description: Normalize review target
+    purpose: Capture the pull request URL, review mode, and available context.
+    agents: [pm]
+    required_outputs: [review_target]
+    transition_conditions:
+      - review_target identifies the PR or missing target assumption
+
+  - id: load_pr_context
+    description: Load pull request context
+    purpose: Gather PR title, body, changed files, diff, linked tickets, and existing comments when available.
+    agents: [scout]
+    required_outputs: [pr_context]
+    dependencies: [intake]
+    transition_conditions:
+      - pr_context cites GitHub connector results, local git output, or assumptions
+
+  - id: review_swarm
+    description: Run multi-lens code review
+    purpose: Assess correctness, maintainability, security, test coverage, and reviewability.
+    agents: [reviewer]
+    required_outputs: [review_report, pr_size_assessment, github_comments_preview]
+    dependencies: [load_pr_context]
+    transition_conditions:
+      - review_report findings cite files, artifacts, commands, or connector results
+      - oversized PR findings are explicit blockers when policy requires
+
+  - id: comment_selection
+    description: Select external comments
+    purpose: Let the user choose which proposed GitHub comments to post.
+    agents: [release]
+    required_outputs: [external_posting_selection]
+    dependencies: [review_swarm]
+    approval_required: true
+    transition_conditions:
+      - external comments are not posted automatically
+      - selected and skipped comment IDs are recorded
+
+  - id: delivery
+    description: Package review evidence
+    purpose: Summarize review outcome, selected comments, blockers, and residual risk.
+    agents: [release]
+    required_outputs: [validation_status]
+    dependencies: [comment_selection]

@@ -20,6 +20,8 @@ Each skill should include:
 
 A skill should make shortcuts harder. It should explain what evidence is required before the run can advance.
 
+Swarms are still governed skill executions. A review swarm or QA swarm may use multiple lenses, but it must produce artifacts with cited evidence; it is not free-form chat consensus and it does not bypass role boundaries, previews, or policy gates.
+
 ## Authoring Standard
 
 Skills should read like workflow cards a disciplined team would actually use. They should not say "ensure quality" without defining evidence. Every skill needs a finish line: an artifact, verification command, approval, or explicit escalation.

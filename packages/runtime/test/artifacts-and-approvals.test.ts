@@ -84,6 +84,44 @@ describe("artifacts and approvals", () => {
     });
   });
 
+  it("records external posting selections in run state", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
+    const runtime = new FlowRuntime({ repoRoot: workspace, store: new FileRunStore(workspace) });
+    const run = await runtime.startFeatureRun({
+      flow,
+      title: "Review PR 123",
+      goal: "Review https://github.com/org/repo/pull/123",
+      scope: "review",
+      target: {
+        type: "github_pr",
+        value: "https://github.com/org/repo/pull/123"
+      },
+      now: new Date("2026-04-18T08:00:00.000Z")
+    });
+
+    const updated = await runtime.recordExternalPostingSelection(run.id, {
+      target: "https://github.com/org/repo/pull/123",
+      selection_mode: "selected",
+      selected_comment_ids: ["comment-1", "comment-2"],
+      skipped_comment_ids: ["comment-3"],
+      posted: [],
+      now: new Date("2026-04-18T09:00:00.000Z")
+    });
+
+    expect(updated.external_posting_selections).toEqual([
+      {
+        target: "https://github.com/org/repo/pull/123",
+        selection_mode: "selected",
+        selected_comment_ids: ["comment-1", "comment-2"],
+        skipped_comment_ids: ["comment-3"],
+        posted: []
+      }
+    ]);
+
+    const persistedRun = JSON.parse(await readFile(join(workspace, ".runs", run.id, "run.json"), "utf8"));
+    expect(persistedRun.external_posting_selections[0].selected_comment_ids).toEqual(["comment-1", "comment-2"]);
+  });
+
   it("lists persisted runs newest first", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
     const store = new FileRunStore(workspace);

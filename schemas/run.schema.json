@@ -28,6 +28,22 @@
         "goal": { "type": "string" }
       }
     },
+    "scope": {
+      "type": "string",
+      "enum": ["epic", "story", "feature", "bugfix", "refactor", "spike", "incident", "review", "qa"]
+    },
+    "target": {
+      "type": "object",
+      "required": ["type", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["jira", "github_pr", "github_issue", "url", "local", "plain_text"]
+        },
+        "value": { "type": "string" }
+      }
+    },
     "flow_id": { "type": "string" },
     "current_phase": { "type": "string" },
     "completed_phases": { "type": "array", "items": { "type": "string" } },
@@ -40,6 +56,14 @@
     "policy_decisions": { "type": "array" },
     "hook_executions": { "type": "array" },
     "connector_write_previews": { "type": "array" },
+    "external_comment_previews": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/externalCommentPreview" }
+    },
+    "external_posting_selections": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/externalPostingSelection" }
+    },
     "logs": { "type": "array" },
     "unresolved_assumptions": { "type": "array", "items": { "type": "string" } },
     "unresolved_risks": { "type": "array", "items": { "type": "string" } },
@@ -56,6 +80,61 @@
         "media_type": { "type": "string" },
         "created_at": { "type": "string" },
         "produced_by_phase": { "type": "string" }
+      }
+    },
+    "externalCommentPreview": {
+      "type": "object",
+      "required": ["id", "connector_id", "target", "type", "severity", "body", "recommended"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "connector_id": { "type": "string" },
+        "target": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["inline", "summary", "status", "message"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["blocker", "high", "medium", "low", "nit", "info"]
+        },
+        "body": { "type": "string" },
+        "recommended": { "type": "boolean" },
+        "file": { "type": "string" },
+        "line": { "type": "number" }
+      }
+    },
+    "externalPostingSelection": {
+      "type": "object",
+      "required": ["target", "selection_mode", "selected_comment_ids", "skipped_comment_ids", "posted"],
+      "additionalProperties": false,
+      "properties": {
+        "target": { "type": "string" },
+        "selection_mode": {
+          "type": "string",
+          "enum": ["recommended", "blockers", "summary", "selected", "none"]
+        },
+        "selected_comment_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "skipped_comment_ids": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "posted": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["comment_id", "connector_id", "external_id"],
+            "additionalProperties": false,
+            "properties": {
+              "comment_id": { "type": "string" },
+              "connector_id": { "type": "string" },
+              "external_id": { "type": "string" }
+            }
+          }
+        }
       }
     }
   }

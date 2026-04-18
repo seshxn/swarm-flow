@@ -47,6 +47,37 @@ export type ArtifactRegistryEntry = {
   produced_by_phase: string;
 };
 
+export type RunScope = "epic" | "story" | "feature" | "bugfix" | "refactor" | "spike" | "incident" | "review" | "qa";
+
+export type RunTarget = {
+  type: "jira" | "github_pr" | "github_issue" | "url" | "local" | "plain_text";
+  value: string;
+};
+
+export type ExternalCommentPreview = {
+  id: string;
+  connector_id: "github" | "jira" | "slack" | string;
+  target: string;
+  type: "inline" | "summary" | "status" | "message";
+  severity: "blocker" | "high" | "medium" | "low" | "nit" | "info";
+  body: string;
+  recommended: boolean;
+  file?: string;
+  line?: number;
+};
+
+export type ExternalPostingSelection = {
+  target: string;
+  selection_mode: "recommended" | "blockers" | "summary" | "selected" | "none";
+  selected_comment_ids: string[];
+  skipped_comment_ids: string[];
+  posted: Array<{
+    comment_id: string;
+    connector_id: string;
+    external_id: string;
+  }>;
+};
+
 export type RunState = {
   id: string;
   repo: {
@@ -71,6 +102,10 @@ export type RunState = {
   logs: RunLogEntry[];
   unresolved_assumptions: string[];
   unresolved_risks: string[];
+  scope?: RunScope;
+  target?: RunTarget;
+  external_comment_previews?: ExternalCommentPreview[];
+  external_posting_selections?: ExternalPostingSelection[];
   created_at: string;
   updated_at: string;
 };
@@ -116,11 +151,53 @@ export type Policy = {
     requires_risk_approval_when_threshold_exceeded?: boolean;
   };
   blocked_without_approval?: string[];
+  manageable_pr_policy?: ManageablePrPolicy;
+  external_comment_posting?: ExternalCommentPostingPolicy;
 };
 
 export type PolicyDecision = {
   allowed: boolean;
   reasons: string[];
+};
+
+export type ManageablePrPolicy = {
+  max_changed_files_warn?: number;
+  max_changed_files_block?: number;
+  max_changed_lines_warn?: number;
+  max_changed_lines_block?: number;
+  max_packages_warn?: number;
+  max_packages_block?: number;
+  block_mixed_migration_and_behavior_change?: boolean;
+  block_unrelated_concerns?: boolean;
+  require_slice_plan_before_implementation?: boolean;
+  allow_override_with_approval?: boolean;
+};
+
+export type PrSizeInput = {
+  changedFiles: number;
+  changedLines: number;
+  packagesTouched: number;
+  includesMigration?: boolean;
+  includesBehaviorChange?: boolean;
+  unrelatedConcerns?: string[];
+  hasSlicePlan?: boolean;
+  hasApproval?: boolean;
+};
+
+export type PrSizeDecision = PolicyDecision & {
+  level: "allow" | "warn" | "block";
+};
+
+export type ExternalCommentPostingPolicy = {
+  default_mode: "preview";
+  require_user_selection: boolean;
+  allow_auto_post: boolean;
+};
+
+export type ExternalCommentPostingEvaluation = {
+  policy: ExternalCommentPostingPolicy;
+  hasUserSelection: boolean;
+  autoPostRequested: boolean;
 };
 
 export type PhaseEntryEvaluation = {
@@ -238,6 +315,97 @@ export function evaluateExternalWrite(input: ExternalWriteEvaluation): PolicyDec
 
   if (input.policy.external_writes_require_preview && !input.preview) {
     reasons.push(`${input.connectorId} writes require preview mode`);
+  }
+
+  return {
+    allowed: reasons.length === 0,
+    reasons
+  };
+}
+
+export function evaluatePrSize(input: { policy: ManageablePrPolicy; input: PrSizeInput }): PrSizeDecision {
+  const reasons: string[] = [];
+  let hasWarning = false;
+  let hasBlocker = false;
+  const metrics = input.input;
+  const policy = input.policy;
+
+  function warnIf(condition: boolean, reason: string): void {
+    if (condition && !hasBlocker && !hasWarning) {
+      hasWarning = true;
+      reasons.push(reason);
+    }
+  }
+
+  function blockIf(condition: boolean, reason: string): void {
+    if (condition) {
+      hasBlocker = true;
+      reasons.push(reason);
+    }
+  }
+
+  blockIf(
+    typeof policy.max_changed_files_block === "number" && metrics.changedFiles > policy.max_changed_files_block,
+    `PR changes ${metrics.changedFiles} files, exceeding block limit ${policy.max_changed_files_block}`
+  );
+  blockIf(
+    typeof policy.max_changed_lines_block === "number" && metrics.changedLines > policy.max_changed_lines_block,
+    `PR changes ${metrics.changedLines} lines, exceeding block limit ${policy.max_changed_lines_block}`
+  );
+  blockIf(
+    typeof policy.max_packages_block === "number" && metrics.packagesTouched > policy.max_packages_block,
+    `PR touches ${metrics.packagesTouched} packages, exceeding block limit ${policy.max_packages_block}`
+  );
+  blockIf(
+    Boolean(
+      policy.block_mixed_migration_and_behavior_change && metrics.includesMigration && metrics.includesBehaviorChange
+    ),
+    "PR mixes migration and behavior change"
+  );
+  blockIf(
+    Boolean(policy.block_unrelated_concerns && metrics.unrelatedConcerns?.length),
+    `PR bundles unrelated concerns: ${metrics.unrelatedConcerns?.join(", ")}`
+  );
+  blockIf(
+    Boolean(policy.require_slice_plan_before_implementation && !metrics.hasSlicePlan),
+    "implementation requires slice_plan"
+  );
+
+  warnIf(
+    typeof policy.max_changed_files_warn === "number" && metrics.changedFiles > policy.max_changed_files_warn,
+    `PR changes ${metrics.changedFiles} files, exceeding warn limit ${policy.max_changed_files_warn}`
+  );
+  warnIf(
+    typeof policy.max_changed_lines_warn === "number" && metrics.changedLines > policy.max_changed_lines_warn,
+    `PR changes ${metrics.changedLines} lines, exceeding warn limit ${policy.max_changed_lines_warn}`
+  );
+  warnIf(
+    typeof policy.max_packages_warn === "number" && metrics.packagesTouched > policy.max_packages_warn,
+    `PR touches ${metrics.packagesTouched} packages, exceeding warn limit ${policy.max_packages_warn}`
+  );
+
+  if (hasBlocker && policy.allow_override_with_approval && metrics.hasApproval) {
+    return { allowed: true, level: "warn", reasons };
+  }
+
+  const level: PrSizeDecision["level"] = hasBlocker ? "block" : hasWarning ? "warn" : "allow";
+
+  return {
+    allowed: !hasBlocker,
+    level,
+    reasons
+  };
+}
+
+export function evaluateExternalCommentPosting(input: ExternalCommentPostingEvaluation): PolicyDecision {
+  const reasons: string[] = [];
+
+  if (input.autoPostRequested && !input.policy.allow_auto_post) {
+    reasons.push("external comments cannot be posted automatically");
+  }
+
+  if (input.policy.require_user_selection && !input.hasUserSelection) {
+    reasons.push("external comments require user selection");
   }
 
   return {

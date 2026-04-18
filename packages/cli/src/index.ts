@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { parse } from "yaml";
 import { FileRunStore, FlowRuntime } from "@swarm-flow/runtime";
-import { validateFlow } from "@swarm-flow/core";
+import { validateFlow, type RunScope, type RunTarget } from "@swarm-flow/core";
 
 export type CliIo = {
   cwd?: string;
@@ -17,9 +17,10 @@ type StartOptions = {
   title?: string;
   goal?: string;
   flow?: string;
+  target?: string;
 };
 
-type StartKind = "feature" | "bugfix" | "refactor" | "spike" | "incident";
+type StartKind = "feature" | "bugfix" | "refactor" | "spike" | "incident" | "epic" | "review" | "qa";
 
 type InitOptions = {
   agent?: "claude" | "codex" | "all";
@@ -29,6 +30,14 @@ type ApproveOptions = {
   run?: string;
   by?: string;
   note?: string;
+};
+
+type CommentRunOptions = {
+  run?: string;
+};
+
+type CommentSelectOptions = CommentRunOptions & {
+  ids: string;
 };
 
 const cliDir = dirname(fileURLToPath(import.meta.url));
@@ -75,26 +84,70 @@ export function createProgram(io: CliIo = {}): Command {
     .option("--title <title>", "feature title")
     .option("--goal <goal>", "delivery goal")
     .option("--flow <path>", "flow YAML path; inferred from request when omitted")
+    .option("--target <target>", "target URL, ticket key, or local target for scoped runs")
     .description("Start a new persisted run from a plain-language request.")
     .action(async (requestOrType: string, requestParts: string[], options: StartOptions) => {
       const normalized = normalizeStartInput(requestOrType, requestParts, options);
       const flowPath = options.flow
         ? resolve(cwd, options.flow)
         : resolve(repoRootFromDist, defaultFlowPath(normalized.type));
-      const flow = parse(await readFile(flowPath, "utf8")) as unknown;
-      const runtime = new FlowRuntime({
-        repoRoot: cwd,
-        store: new FileRunStore(cwd)
-      });
-      const run = await runtime.startFeatureRun({
-        flow,
+      await startRun({
+        cwd,
+        stdout,
+        flowPath,
         title: normalized.title,
-        goal: normalized.goal
+        goal: normalized.goal,
+        scope: normalized.type,
+        target: normalized.target
       });
+    });
 
-      stdout(`Started ${run.id}`);
-      stdout(`Current phase: ${run.current_phase}`);
-      stdout(`Run state: .runs/${run.id}/run.json`);
+  program
+    .command("epic")
+    .argument("<target>", "Jira epic key, GitHub issue, or objective")
+    .description("Start an epic delivery run.")
+    .action(async (target: string) => {
+      await startRun({
+        cwd,
+        stdout,
+        flowPath: resolve(repoRootFromDist, "flows/epic-delivery.yaml"),
+        title: scopedTitle("epic", target),
+        goal: `Deliver epic ${target}`,
+        scope: "epic",
+        target: parseTarget(target)
+      });
+    });
+
+  program
+    .command("review")
+    .argument("<target>", "GitHub pull request URL")
+    .description("Start a standalone PR review swarm run.")
+    .action(async (target: string) => {
+      await startRun({
+        cwd,
+        stdout,
+        flowPath: resolve(repoRootFromDist, "flows/review-only.yaml"),
+        title: scopedTitle("review", target),
+        goal: `Review ${target}`,
+        scope: "review",
+        target: parseTarget(target)
+      });
+    });
+
+  program
+    .command("qa")
+    .argument("<target>", "PR URL, Jira key, deploy preview, local URL, or test target")
+    .description("Start a standalone QA swarm run.")
+    .action(async (target: string) => {
+      await startRun({
+        cwd,
+        stdout,
+        flowPath: resolve(repoRootFromDist, "flows/qa-only.yaml"),
+        title: scopedTitle("qa", target),
+        goal: `QA ${target}`,
+        scope: "qa",
+        target: parseTarget(target)
+      });
     });
 
   program
@@ -313,6 +366,76 @@ export function createProgram(io: CliIo = {}): Command {
       stdout(`Preview written: ${previewPath}`);
     });
 
+  const comments = program.command("comments").description("Preview and select external comments.");
+  comments
+    .command("preview")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Create selectable external comment previews for a run.")
+    .action(async (options: CommentRunOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = options.run ? await store.load(options.run) : await store.latest();
+      if (!run) {
+        throw new Error("No runs found.");
+      }
+      const previewDir = resolve(cwd, ".runs", run.id, "outputs", "previews");
+      await mkdir(previewDir, { recursive: true });
+      const connectorId = commentConnectorId(run.target?.type);
+      const previewPath = resolve(previewDir, `${connectorId}-comments.preview.json`);
+      const target = run.target?.value ?? run.feature.goal;
+      const preview = {
+        runId: run.id,
+        mode: "preview",
+        target,
+        comments: [
+          {
+            id: "comment-1",
+            connector_id: connectorId,
+            type: "summary",
+            severity: "info",
+            body: `${run.flow_id} report is available in this swarm-flow run.`,
+            recommended: true
+          }
+        ]
+      };
+      await writeFile(previewPath, `${JSON.stringify(preview, null, 2)}\n`, "utf8");
+      stdout(`Comment preview written: ${previewPath}`);
+    });
+
+  comments
+    .command("select")
+    .requiredOption("--ids <ids>", "comma-separated comment ids to select")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Record selected external comments without posting them.")
+    .action(async (options: CommentSelectOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = options.run ? await store.load(options.run) : await store.latest();
+      if (!run) {
+        throw new Error("No runs found.");
+      }
+      const connectorId = commentConnectorId(run.target?.type);
+      const previewPath = resolve(cwd, ".runs", run.id, "outputs", "previews", `${connectorId}-comments.preview.json`);
+      const preview = JSON.parse(await readFile(previewPath, "utf8")) as {
+        target: string;
+        comments: Array<{ id: string }>;
+      };
+      const selectedIds = options.ids
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean);
+      const skippedIds = preview.comments
+        .map((comment) => comment.id)
+        .filter((id) => !selectedIds.includes(id));
+
+      await new FlowRuntime({ repoRoot: cwd, store }).recordExternalPostingSelection(run.id, {
+        target: preview.target,
+        selection_mode: "selected",
+        selected_comment_ids: selectedIds,
+        skipped_comment_ids: skippedIds,
+        posted: []
+      });
+      stdout(`Comment selection recorded for ${run.id}`);
+    });
+
   program
     .command("doctor")
     .description("Check local workspace prerequisites.")
@@ -339,10 +462,11 @@ function normalizeStartInput(
   requestOrType: string,
   requestParts: string[],
   options: StartOptions
-): { type: StartKind; title: string; goal: string } {
+): { type: StartKind; title: string; goal: string; target?: RunTarget } {
   const explicitType = parseStartKind(requestOrType);
   const request = explicitType ? requestParts.join(" ").trim() : [requestOrType, ...requestParts].join(" ").trim();
-  const goal = options.goal ?? request;
+  const targetValue = options.target ?? (explicitType && ["epic", "review", "qa"].includes(explicitType) ? request : undefined);
+  const goal = options.goal ?? targetValue ?? request;
   const title = options.title ?? deriveTitle(goal);
 
   if (!goal) {
@@ -352,7 +476,8 @@ function normalizeStartInput(
   return {
     type: explicitType ?? inferStartKind(goal),
     title,
-    goal
+    goal,
+    target: targetValue ? parseTarget(targetValue) : undefined
   };
 }
 
@@ -372,6 +497,15 @@ function parseStartKind(value: string): StartKind | undefined {
   }
   if (normalized === "incident" || normalized === "remediation") {
     return "incident";
+  }
+  if (normalized === "epic") {
+    return "epic";
+  }
+  if (normalized === "review") {
+    return "review";
+  }
+  if (normalized === "qa") {
+    return "qa";
   }
   return undefined;
 }
@@ -398,9 +532,76 @@ function defaultFlowPath(type: StartKind): string {
     bugfix: "flows/bugfix-fastlane.yaml",
     refactor: "flows/refactor-guided.yaml",
     spike: "flows/spike-research.yaml",
-    incident: "flows/incident-remediation.yaml"
+    incident: "flows/incident-remediation.yaml",
+    epic: "flows/epic-delivery.yaml",
+    review: "flows/review-only.yaml",
+    qa: "flows/qa-only.yaml"
   };
   return flowsByType[type];
+}
+
+async function startRun(input: {
+  cwd: string;
+  stdout: (line: string) => void;
+  flowPath: string;
+  title: string;
+  goal: string;
+  scope: RunScope;
+  target?: RunTarget;
+}): Promise<void> {
+  const flow = parse(await readFile(input.flowPath, "utf8")) as unknown;
+  const runtime = new FlowRuntime({
+    repoRoot: input.cwd,
+    store: new FileRunStore(input.cwd)
+  });
+  const run = await runtime.startFeatureRun({
+    flow,
+    title: input.title,
+    goal: input.goal,
+    scope: input.scope,
+    target: input.target
+  });
+
+  input.stdout(`Started ${run.id}`);
+  input.stdout(`Current phase: ${run.current_phase}`);
+  input.stdout(`Run state: .runs/${run.id}/run.json`);
+}
+
+function parseTarget(value: string): RunTarget {
+  if (/^https:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/i.test(value)) {
+    return { type: "github_pr", value };
+  }
+  if (/^https:\/\/github\.com\/[^/]+\/[^/]+\/issues\/\d+/i.test(value)) {
+    return { type: "github_issue", value };
+  }
+  if (/^https?:\/\//i.test(value)) {
+    return { type: "url", value };
+  }
+  if (/^[A-Z][A-Z0-9]+-\d+$/.test(value)) {
+    return { type: "jira", value };
+  }
+  return { type: "plain_text", value };
+}
+
+function scopedTitle(scope: Extract<RunScope, "epic" | "review" | "qa">, target: string): string {
+  if (scope === "review") {
+    const prNumber = target.match(/\/pull\/(\d+)/i)?.[1];
+    return prNumber ? `Review PR ${prNumber}` : deriveTitle(`Review ${target}`);
+  }
+  if (scope === "qa") {
+    return deriveTitle(`QA ${target}`);
+  }
+  return deriveTitle(`Epic ${target}`);
+}
+
+function commentConnectorId(targetType?: RunTarget["type"]): "github" | "jira" | "slack" {
+  if (targetType === "github_pr" || targetType === "github_issue") {
+    return "github";
+  }
+  if (targetType === "jira") {
+    return "jira";
+  }
+  return "github";
 }
 
 function deriveTitle(goal: string): string {
