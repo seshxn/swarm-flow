@@ -1,0 +1,7 @@
+{
+  "target": "https://github.com/org/repo/pull/123",
+  "selection_mode": "selected",
+  "selected_comment_ids": ["comment-1"],
+  "skipped_comment_ids": [],
+  "posted": []
+}

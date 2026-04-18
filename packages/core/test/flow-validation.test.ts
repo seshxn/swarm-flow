@@ -1,4 +1,7 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import { validateFlow } from "../src/index.js";
 
 describe("validateFlow", () => {
@@ -93,5 +96,18 @@ describe("validateFlow", () => {
 
     expect(result.ok).toBe(false);
     expect(result.errors.join("\n")).toContain("cycle");
+  });
+
+  it("validates epic delivery and standalone swarm flows", async () => {
+    const flowIds = ["epic-delivery", "review-only", "qa-only"];
+
+    for (const flowId of flowIds) {
+      const flow = parse(await readFile(resolve(process.cwd(), "flows", `${flowId}.yaml`), "utf8")) as unknown;
+      const result = validateFlow(flow);
+
+      expect(result.errors).toEqual([]);
+      expect(result.ok).toBe(true);
+      expect(result.flow?.id).toBe(flowId);
+    }
   });
 });

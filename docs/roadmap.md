@@ -17,9 +17,12 @@
 
 ## Milestone 3: External Connectors
 
-- Jira read and preview-write
-- Confluence read and preview-write
-- GitHub PR draft generation
+- connector capability registry
+- Jira and Confluence preview-safe backends
+- GitHub PR context and comment previews
+- Slack summary previews
+- selected external comments
+- later live MCP/plugin writes behind policy gates
 
 ## Milestone 4: Implementation and Validation Loop
 
@@ -27,6 +30,9 @@
 - code changes
 - lint, typecheck, and tests
 - reviewer and QA pass
+- standalone review-only swarm runs
+- standalone QA-only swarm runs
+- manageable PR size assessment
 
 ## Milestone 5: Governance
 

@@ -92,6 +92,9 @@ node packages/cli/dist/index.js runs list
 | --- | --- |
 | `swarm-flow init` | Create local config. |
 | `swarm-flow start "<request>"` | Start a feature run from a plain-language request. |
+| `swarm-flow epic <target>` | Start an epic delivery run from a Jira key, GitHub issue, or objective. |
+| `swarm-flow review <github-pr-url>` | Start a standalone PR review swarm run. |
+| `swarm-flow qa <target>` | Start a standalone QA swarm run from a PR, ticket, URL, or test target. |
 | `swarm-flow status` | Show current run status. |
 | `swarm-flow resume` | Show next actionable phase and required outputs. |
 | `swarm-flow artifacts` | List registered artifacts. |
@@ -104,9 +107,13 @@ node packages/cli/dist/index.js runs list
 | `swarm-flow integrations show <id>` | Show integration install notes. |
 | `swarm-flow approve <phase>` | Record a human approval. |
 | `swarm-flow preview <target>` | Write and record an external-write preview. |
+| `swarm-flow comments preview` | Write selectable external comment previews for a run. |
+| `swarm-flow comments select --ids <ids>` | Record selected external comments without posting them. |
 | `swarm-flow runs list` | List persisted runs. |
 | `swarm-flow run show <id>` | Show one run in detail. |
 | `swarm-flow doctor` | Check local environment basics. |
+
+Review and QA swarms produce local artifacts and preview external comments. GitHub, Jira, and Slack comments are selected by the user before posting; they are not posted automatically.
 
 ## Example Flow
 

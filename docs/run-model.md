@@ -22,6 +22,8 @@ The run state tracks:
 - run id
 - repository root
 - feature title and goal
+- run scope
+- target URL, ticket, PR, local target, or plain text target
 - flow id and flow snapshot
 - current phase
 - completed phases
@@ -32,8 +34,27 @@ The run state tracks:
 - approvals
 - tool writes
 - connector write previews
+- external comment previews
+- external posting selections
 - logs
 - unresolved assumptions
+
+## Run Scopes
+
+Runs can represent different levels of work:
+
+- `epic` for full epic-to-delivery orchestration
+- `story`, `feature`, `bugfix`, `refactor`, `spike`, and `incident` for focused delivery
+- `review` for standalone PR review swarms
+- `qa` for standalone QA swarms
+
+The `target` field records the external or local object being worked on, such as a Jira key, GitHub PR URL, deploy preview URL, local URL, or plain text objective.
+
+## Comment Preview Lifecycle
+
+Review and QA runs can create comment previews under `.runs/<run-id>/outputs/previews/`. Selecting comments records `external_posting_selection` in `run.json`.
+
+No comment is posted automatically. A later connector write must use the selected IDs, policy decision, idempotency key, and audit log entry.
 
 ## Resumability
 

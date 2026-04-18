@@ -1,0 +1,102 @@
+id: epic-delivery
+name: Epic Delivery
+description: Governed orchestration from epic intake to delivery across right-sized stories and PR slices.
+phases:
+  - id: intake
+    description: Normalize epic or objective
+    purpose: Capture the source epic, objective, stakeholders, constraints, and success criteria.
+    agents: [pm]
+    required_outputs: [epic_brief]
+    transition_conditions:
+      - epic_brief is registered
+      - source target is recorded or explicitly absent
+    hooks:
+      before: [load_project_context]
+      after: [persist_artifacts]
+
+  - id: discovery
+    description: Gather repository and external context
+    purpose: Ground story mapping in repo, ticket, docs, PR, CI, and Slack context.
+    agents: [scout]
+    required_outputs: [discovery_report, assumptions_log, dependency_map]
+    dependencies: [intake]
+    transition_conditions:
+      - discovery_report cites files, tickets, docs, commands, or connector results
+      - assumptions_log separates facts from inferred claims
+
+  - id: story_mapping
+    description: Propose child stories
+    purpose: Convert the epic into manageable delivery stories without writing external tickets yet.
+    agents: [pm, architect]
+    required_outputs: [story_map]
+    dependencies: [discovery]
+    approval_required: true
+    transition_conditions:
+      - story_map previews create-or-update intent
+      - every story maps to acceptance criteria or a named unknown
+      - human approval is recorded before external ticket writes
+
+  - id: slice_planning
+    description: Plan PR-sized implementation slices
+    purpose: Prevent oversized PRs by defining reviewable implementation units before code changes.
+    agents: [architect, reviewer, qa]
+    required_outputs: [slice_plan, pr_size_assessment]
+    dependencies: [story_mapping]
+    transition_conditions:
+      - slice_plan maps stories to implementation slices
+      - pr_size_assessment has no unapproved blockers
+
+  - id: design
+    description: Produce technical design for risky slices
+    purpose: Make architecture, data flow, rollout, and rollback explicit where needed.
+    agents: [architect]
+    required_outputs: [technical_design, adr, risk_report]
+    dependencies: [slice_planning]
+    approval_required: true
+
+  - id: ticketing
+    description: Preview external ticket updates
+    purpose: Prepare Jira or GitHub issue changes with idempotency and approval.
+    agents: [pm]
+    required_outputs: [jira_mapping, external_sync_preview]
+    dependencies: [design]
+    transition_conditions:
+      - external writes are previewed
+      - idempotency keys are present
+
+  - id: implementation
+    description: Execute one bounded slice at a time
+    purpose: Make scoped code changes with validation evidence.
+    agents: [implementer]
+    required_outputs: [code_changes, tests_added]
+    dependencies: [ticketing]
+
+  - id: qa_swarm
+    description: Validate acceptance criteria and regression risk
+    purpose: Help QA focus on evidence, gaps, and high-risk flows.
+    agents: [qa]
+    required_outputs: [qa_plan, acceptance_matrix, regression_risk_report, test_gap_report, qa_report, validation_status]
+    dependencies: [implementation]
+
+  - id: review_swarm
+    description: Review correctness, maintainability, and reviewability
+    purpose: Produce multi-lens review findings and optional GitHub comment previews.
+    agents: [reviewer]
+    required_outputs: [review_report, pr_size_assessment, github_comments_preview]
+    dependencies: [implementation]
+
+  - id: status_sync
+    description: Preview external status and comment updates
+    purpose: Let the user select GitHub, Jira, and Slack updates to post.
+    agents: [release]
+    required_outputs: [external_sync_preview, external_posting_selection]
+    dependencies: [qa_swarm, review_swarm]
+    approval_required: true
+
+  - id: delivery
+    description: Package delivery evidence
+    purpose: Summarize readiness, approvals, residual risk, and merge posture.
+    agents: [release]
+    required_outputs: [delivery_package, pr_summary, merge_checklist]
+    dependencies: [status_sync]
+    approval_required: true

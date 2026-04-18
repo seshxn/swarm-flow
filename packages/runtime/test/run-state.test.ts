@@ -59,6 +59,36 @@ describe("FlowRuntime", () => {
     expect(featureBrief).toContain("Allow admins to reassign cases");
   });
 
+  it("starts a standalone review run with target metadata", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
+    const runtime = new FlowRuntime({
+      repoRoot: workspace,
+      store: new FileRunStore(workspace)
+    });
+
+    const run = await runtime.startFeatureRun({
+      flow,
+      title: "Review PR 123",
+      goal: "Review https://github.com/org/repo/pull/123",
+      scope: "review",
+      target: {
+        type: "github_pr",
+        value: "https://github.com/org/repo/pull/123"
+      },
+      now: new Date("2026-04-18T08:00:00.000Z")
+    });
+
+    expect(run.scope).toBe("review");
+    expect(run.target).toEqual({
+      type: "github_pr",
+      value: "https://github.com/org/repo/pull/123"
+    });
+
+    const persistedRun = JSON.parse(await readFile(join(workspace, ".runs", run.id, "run.json"), "utf8"));
+    expect(persistedRun.scope).toBe("review");
+    expect(persistedRun.target.type).toBe("github_pr");
+  });
+
   it("does not advance a phase until required outputs exist", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
     const runtime = new FlowRuntime({

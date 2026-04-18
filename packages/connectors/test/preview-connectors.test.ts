@@ -5,7 +5,9 @@ import {
   createFilesystemConnector,
   createGitConnector,
   createGitHubConnector,
-  createJiraConnector
+  createJiraConnector,
+  createSlackConnector,
+  discoverConnectorCapabilities
 } from "../src/index.js";
 
 describe("preview connectors", () => {
@@ -33,6 +35,7 @@ describe("preview connectors", () => {
       createGitHubConnector(),
       createJiraConnector(),
       createConfluenceConnector(),
+      createSlackConnector(),
       createCiConnector()
     ];
 
@@ -42,7 +45,32 @@ describe("preview connectors", () => {
       "github",
       "jira",
       "confluence",
+      "slack",
       "ci"
     ]);
+  });
+
+  it("exposes slack as a preview-safe connector", async () => {
+    const slack = createSlackConnector();
+    const result = await slack.update({
+      preview: true,
+      idempotencyKey: "run-1:slack:summary",
+      payload: {
+        channel: "#delivery",
+        body: "Review completed."
+      }
+    });
+
+    expect(slack.id).toBe("slack");
+    expect(result.preview).toBe(true);
+    expect(result.writeLogEntry.connector).toBe("slack");
+  });
+
+  it("discovers preview backend capabilities for external connectors", () => {
+    const capabilities = discoverConnectorCapabilities();
+
+    expect(capabilities.connectors.github).toContain("preview");
+    expect(capabilities.connectors.jira).toContain("preview");
+    expect(capabilities.connectors.slack).toContain("preview");
   });
 });

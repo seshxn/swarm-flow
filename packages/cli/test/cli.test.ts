@@ -61,6 +61,9 @@ describe("CLI", () => {
 
     expect(output.join("\n")).toContain("feature-default");
     expect(output.join("\n")).toContain("incident-remediation");
+    expect(output.join("\n")).toContain("epic-delivery");
+    expect(output.join("\n")).toContain("review-only");
+    expect(output.join("\n")).toContain("qa-only");
   });
 
   it("inspects bundled flows and skills", async () => {
@@ -73,9 +76,15 @@ describe("CLI", () => {
 
     await program.parseAsync(["node", "swarm-flow", "flows", "inspect", "feature-default"]);
     await program.parseAsync(["node", "swarm-flow", "skills", "inspect", "planning/task-breakdown"]);
+    await program.parseAsync(["node", "swarm-flow", "skills", "inspect", "planning/slice-planning"]);
+    await program.parseAsync(["node", "swarm-flow", "skills", "inspect", "validation/review-swarm"]);
+    await program.parseAsync(["node", "swarm-flow", "skills", "inspect", "validation/qa-swarm"]);
 
     expect(output.join("\n")).toContain("Feature Delivery");
     expect(output.join("\n")).toContain("Task Breakdown");
+    expect(output.join("\n")).toContain("Slice Planning");
+    expect(output.join("\n")).toContain("Review Swarm");
+    expect(output.join("\n")).toContain("QA Swarm");
   });
 
   it("lists and shows agent integrations", async () => {
@@ -210,5 +219,125 @@ describe("CLI", () => {
     expect(runState.current_phase).toBe("intake");
     expect(runState.artifact_registry.bug_brief.path).toBe("artifacts/bug-brief.md");
     expect(runState.artifact_registry.feature_brief).toBeUndefined();
+  });
+
+  it("starts explicit epic, review, and qa runs with target metadata", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "epic", "JIRA-123"]);
+    await program.parseAsync(["node", "swarm-flow", "review", "https://github.com/org/repo/pull/123"]);
+    await program.parseAsync(["node", "swarm-flow", "qa", "https://preview.example.com"]);
+
+    const runIds = output.filter((line) => line.startsWith("Started ")).map((line) => line.replace("Started ", ""));
+    expect(runIds).toHaveLength(3);
+
+    const [epicRun, reviewRun, qaRun] = await Promise.all(
+      runIds.map(async (runId) => JSON.parse(await readFile(join(workspace ?? "", ".runs", runId, "run.json"), "utf8")))
+    );
+    expect(epicRun.flow_id).toBe("epic-delivery");
+    expect(epicRun.scope).toBe("epic");
+    expect(epicRun.target).toEqual({ type: "jira", value: "JIRA-123" });
+    expect(reviewRun.flow_id).toBe("review-only");
+    expect(reviewRun.scope).toBe("review");
+    expect(reviewRun.target).toEqual({ type: "github_pr", value: "https://github.com/org/repo/pull/123" });
+    expect(qaRun.flow_id).toBe("qa-only");
+    expect(qaRun.scope).toBe("qa");
+    expect(qaRun.target).toEqual({ type: "url", value: "https://preview.example.com" });
+  });
+
+  it("routes start review and start qa to standalone swarm flows", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "review", "--target", "https://github.com/org/repo/pull/456"]);
+    await program.parseAsync(["node", "swarm-flow", "start", "qa", "--target", "https://preview.example.com"]);
+
+    const runIds = output.filter((line) => line.startsWith("Started ")).map((line) => line.replace("Started ", ""));
+    expect(runIds).toHaveLength(2);
+
+    const [reviewRun, qaRun] = await Promise.all(
+      runIds.map(async (runId) => JSON.parse(await readFile(join(workspace ?? "", ".runs", runId, "run.json"), "utf8")))
+    );
+    expect(reviewRun.flow_id).toBe("review-only");
+    expect(reviewRun.scope).toBe("review");
+    expect(reviewRun.target).toEqual({ type: "github_pr", value: "https://github.com/org/repo/pull/456" });
+    expect(qaRun.flow_id).toBe("qa-only");
+    expect(qaRun.scope).toBe("qa");
+    expect(qaRun.target).toEqual({ type: "url", value: "https://preview.example.com" });
+  });
+
+  it("previews external comments for a standalone review run", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "review", "https://github.com/org/repo/pull/123"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
+    expect(runId).toBeTruthy();
+
+    await program.parseAsync(["node", "swarm-flow", "comments", "preview", "--run", runId ?? "missing"]);
+
+    const preview = JSON.parse(
+      await readFile(join(workspace, ".runs", runId ?? "missing", "outputs", "previews", "github-comments.preview.json"), "utf8")
+    );
+    expect(preview.mode).toBe("preview");
+    expect(preview.target).toBe("https://github.com/org/repo/pull/123");
+    expect(preview.comments[0]).toMatchObject({
+      id: "comment-1",
+      connector_id: "github",
+      recommended: true
+    });
+  });
+
+  it("records selected external comments without posting them", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "review", "https://github.com/org/repo/pull/123"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
+    expect(runId).toBeTruthy();
+    await program.parseAsync(["node", "swarm-flow", "comments", "preview", "--run", runId ?? "missing"]);
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "comments",
+      "select",
+      "--run",
+      runId ?? "missing",
+      "--ids",
+      "comment-1"
+    ]);
+
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId ?? "missing", "run.json"), "utf8"));
+    expect(runState.external_posting_selections).toEqual([
+      {
+        target: "https://github.com/org/repo/pull/123",
+        selection_mode: "selected",
+        selected_comment_ids: ["comment-1"],
+        skipped_comment_ids: [],
+        posted: []
+      }
+    ]);
+    expect(output.join("\n")).toContain("Comment selection recorded");
   });
 });

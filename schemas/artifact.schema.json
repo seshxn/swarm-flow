@@ -6,7 +6,10 @@
   "required": ["id", "path", "media_type", "produced_by_phase"],
   "additionalProperties": false,
   "properties": {
-    "id": { "type": "string" },
+    "id": {
+      "type": "string",
+      "description": "Artifact identifier such as feature_brief, story_map, slice_plan, pr_size_assessment, github_comments_preview, or external_posting_selection."
+    },
     "path": { "type": "string" },
     "media_type": { "type": "string" },
     "produced_by_phase": { "type": "string" },
