@@ -5,7 +5,14 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { parse } from "yaml";
 import { FileRunStore, FlowRuntime } from "@swarm-flow/runtime";
-import { validateFlow, type RunScope, type RunTarget } from "@swarm-flow/core";
+import {
+  createPlaywrightQaBackend,
+  normalizeQaConfig,
+  redactQaConfig,
+  type NormalizeQaConfigInput,
+  type QaBackendId
+} from "@swarm-flow/qa";
+import { validateFlow, type RunScope, type RunState, type RunTarget } from "@swarm-flow/core";
 
 export type CliIo = {
   cwd?: string;
@@ -38,6 +45,40 @@ type CommentRunOptions = {
 
 type CommentSelectOptions = CommentRunOptions & {
   ids: string;
+};
+
+type QaOptions = {
+  backend?: QaBackendId;
+  configFile?: string;
+  targetUrl?: string;
+  loginUrl?: string;
+  apiUrl?: string;
+  previewUrl?: string;
+  healthcheckUrl?: string;
+  testCommand?: string;
+  mode?: "suggest" | "execute" | "full";
+  commentMode?: "preview" | "summary";
+  environment?: string;
+  aiProvider?: "openai" | "azure_openai" | "anthropic" | "bedrock" | "google" | "ollama" | "openai_compatible";
+  aiModel?: string;
+  aiBaseUrl?: string;
+  awsRegion?: string;
+  awsProfile?: string;
+  awsRoleToAssume?: string;
+  awsExternalId?: string;
+  bedrockModelId?: string;
+  bedrockInferenceProfileId?: string;
+  bedrockInferenceProfileArn?: string;
+  browser?: "chromium" | "firefox" | "webkit";
+  headless?: string;
+  timeoutMs?: string;
+  retries?: string;
+  screenshot?: "off" | "failures" | "always";
+  trace?: "off" | "retain-on-failure" | "on";
+  video?: "off" | "retain-on-failure" | "on";
+  usernameEnv?: string;
+  passwordEnv?: string;
+  totpSecretEnv?: string;
 };
 
 const cliDir = dirname(fileURLToPath(import.meta.url));
@@ -137,17 +178,109 @@ export function createProgram(io: CliIo = {}): Command {
   program
     .command("qa")
     .argument("<target>", "PR URL, Jira key, deploy preview, local URL, or test target")
+    .option("--backend <backend>", "QA backend to execute, for example playwright")
+    .option("--config-file <path>", "QA config file path")
+    .option("--target-url <url>", "application URL to test")
+    .option("--login-url <url>", "login URL when different from target URL")
+    .option("--api-url <url>", "API URL used by tests")
+    .option("--preview-url <url>", "deploy preview URL")
+    .option("--healthcheck-url <url>", "URL to check before QA execution")
+    .option("--test-command <command>", "test command to run for the QA backend")
+    .option("--mode <mode>", "QA mode: suggest, execute, or full")
+    .option("--comment-mode <mode>", "comment behavior: preview or summary")
+    .option("--environment <name>", "environment profile name")
+    .option("--ai-provider <provider>", "AI provider for generated QA work")
+    .option("--ai-model <model>", "AI model for the selected provider")
+    .option("--ai-base-url <url>", "base URL for compatible providers")
+    .option("--aws-region <region>", "AWS region for Bedrock")
+    .option("--aws-profile <profile>", "AWS profile for Bedrock")
+    .option("--aws-role-to-assume <arn>", "AWS role ARN to assume for Bedrock")
+    .option("--aws-external-id <id>", "AWS external id for role assumption")
+    .option("--bedrock-model-id <id>", "Bedrock model id")
+    .option("--bedrock-inference-profile-id <id>", "Bedrock inference profile id")
+    .option("--bedrock-inference-profile-arn <arn>", "Bedrock inference profile ARN")
+    .option("--browser <browser>", "browser to run: chromium, firefox, or webkit")
+    .option("--headless <value>", "true or false")
+    .option("--timeout-ms <ms>", "browser/test timeout in milliseconds")
+    .option("--retries <count>", "test retry count")
+    .option("--screenshot <mode>", "off, failures, or always")
+    .option("--trace <mode>", "off, retain-on-failure, or on")
+    .option("--video <mode>", "off, retain-on-failure, or on")
+    .option("--username-env <name>", "env var containing test username")
+    .option("--password-env <name>", "env var containing test password")
+    .option("--totp-secret-env <name>", "env var containing test TOTP secret")
     .description("Start a standalone QA swarm run.")
-    .action(async (target: string) => {
-      await startRun({
+    .action(async (target: string, options: QaOptions) => {
+      const parsedTarget = parseTarget(target);
+      const run = await startRun({
         cwd,
         stdout,
         flowPath: resolve(repoRootFromDist, "flows/qa-only.yaml"),
         title: scopedTitle("qa", target),
         goal: `QA ${target}`,
         scope: "qa",
-        target: parseTarget(target)
+        target: parsedTarget
       });
+
+      if (!options.backend) {
+        return;
+      }
+      if (options.backend !== "playwright") {
+        throw new Error(`Unsupported QA backend ${options.backend}. Expected playwright.`);
+      }
+
+      const config = normalizeQaConfig({
+        fileConfig: await readQaConfigFile(cwd, options.configFile),
+        env: process.env,
+        cliFlags: {
+          targetUrl: options.targetUrl,
+          loginUrl: options.loginUrl,
+          apiUrl: options.apiUrl,
+          previewUrl: options.previewUrl,
+          healthcheckUrl: options.healthcheckUrl,
+          testCommand: options.testCommand,
+          mode: options.mode,
+          commentMode: options.commentMode,
+          environment: options.environment,
+          aiProvider: options.aiProvider,
+          aiModel: options.aiModel,
+          aiBaseUrl: options.aiBaseUrl,
+          awsRegion: options.awsRegion,
+          awsProfile: options.awsProfile,
+          awsRoleToAssumeArn: options.awsRoleToAssume,
+          awsExternalId: options.awsExternalId,
+          bedrockModelId: options.bedrockModelId,
+          bedrockInferenceProfileId: options.bedrockInferenceProfileId,
+          bedrockInferenceProfileArn: options.bedrockInferenceProfileArn,
+          browser: options.browser,
+          headless: options.headless,
+          timeoutMs: options.timeoutMs,
+          retries: options.retries,
+          screenshot: options.screenshot,
+          trace: options.trace,
+          video: options.video,
+          usernameEnv: options.usernameEnv,
+          passwordEnv: options.passwordEnv,
+          totpSecretEnv: options.totpSecretEnv
+        }
+      });
+      const backend = createPlaywrightQaBackend();
+      const result = await backend.execute({
+        runId: run.id,
+        target: parsedTarget,
+        backend: "playwright",
+        targetUrl: config.target.baseUrl,
+        mode: config.mode,
+        config: redactQaConfig(config),
+        testCommand: config.test.command,
+        workingDirectory: cwd,
+        outputDirectory: resolve(cwd, ".runs", run.id, "artifacts")
+      });
+
+      stdout(`QA backend ${result.success ? "passed" : "failed"}: ${result.artifacts.qaReport}`);
+      if (!result.success) {
+        throw new Error(`QA backend failed with exit code ${result.exitCode ?? "unknown"}`);
+      }
     });
 
   program
@@ -454,6 +587,28 @@ export function createProgram(io: CliIo = {}): Command {
   return program;
 }
 
+async function readQaConfigFile(
+  cwd: string,
+  path: string | undefined
+): Promise<NormalizeQaConfigInput["fileConfig"]> {
+  if (!path) {
+    return undefined;
+  }
+
+  try {
+    const absolutePath = resolve(cwd, path);
+    const content = await readFile(absolutePath, "utf8");
+    return path.endsWith(".json")
+      ? (JSON.parse(content) as NormalizeQaConfigInput["fileConfig"])
+      : (parse(content) as NormalizeQaConfigInput["fileConfig"]);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 function currentPhaseOutputs(run: Awaited<ReturnType<FileRunStore["load"]>>): string[] {
   return run.flow_snapshot.phases.find((phase) => phase.id === run.current_phase)?.required_outputs ?? [];
 }
@@ -548,7 +703,7 @@ async function startRun(input: {
   goal: string;
   scope: RunScope;
   target?: RunTarget;
-}): Promise<void> {
+}): Promise<RunState> {
   const flow = parse(await readFile(input.flowPath, "utf8")) as unknown;
   const runtime = new FlowRuntime({
     repoRoot: input.cwd,
@@ -565,6 +720,7 @@ async function startRun(input: {
   input.stdout(`Started ${run.id}`);
   input.stdout(`Current phase: ${run.current_phase}`);
   input.stdout(`Run state: .runs/${run.id}/run.json`);
+  return run;
 }
 
 function parseTarget(value: string): RunTarget {

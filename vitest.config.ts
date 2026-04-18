@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@swarm-flow/core": `${root}packages/core/src/index.ts`,
+      "@swarm-flow/qa": `${root}packages/qa/src/index.ts`,
       "@swarm-flow/runtime": `${root}packages/runtime/src/index.ts`,
       "@swarm-flow/connectors": `${root}packages/connectors/src/index.ts`
     }

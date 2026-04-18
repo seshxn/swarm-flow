@@ -42,6 +42,8 @@ Do not use to change product scope or replace explicit acceptance criteria.
 6. Validate accessibility and browser behavior when relevant.
 7. Identify test gaps and rank them by risk.
 8. Produce previewed external comments or updates without posting automatically.
+9. When a GitHub Action QA run already exists, consume its uploaded `.runs` artifacts instead of rerunning equivalent work.
+10. Normalize local backend and GitHub Action outputs into `qa-context.json`, `qa-report.md`, `test-gap-report.md`, `validation-status.md`, and `github-comments.preview.json`.
 
 # Anti-rationalization checks
 
@@ -55,6 +57,7 @@ Do not use to change product scope or replace explicit acceptance criteria.
 - QA evidence maps to criteria or inferred scope.
 - High-risk gaps block delivery or require approval.
 - External updates are previews until selected.
+- GitHub Action QA evidence is linked or imported before being used for phase completion.
 
 # Exit criteria
 

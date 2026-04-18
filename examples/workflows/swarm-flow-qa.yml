@@ -1,0 +1,28 @@
+name: swarm-flow QA
+
+on:
+  pull_request:
+    types: [opened, synchronize, edited]
+  workflow_dispatch:
+
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./actions/qa
+        with:
+          target: ${{ github.event.pull_request.html_url }}
+          target-url: ${{ secrets.STAGING_URL }}
+          ai-provider: bedrock
+          ai-model: anthropic.claude-3-5-sonnet-20241022-v2:0
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-role-to-assume: ${{ secrets.AWS_BEDROCK_ROLE_ARN }}
+          bedrock-inference-profile-arn: ${{ secrets.BEDROCK_INFERENCE_PROFILE_ARN }}
+          test-command: npx playwright test --reporter=json
+          mode: execute
+          comment-mode: preview

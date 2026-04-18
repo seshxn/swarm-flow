@@ -1,0 +1,206 @@
+name: swarm-flow QA
+description: Run a governed swarm-flow QA backend and upload QA artifacts without posting PR comments.
+author: swarm-flow
+
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  target:
+    description: PR URL, preview URL, Jira key, or plain-text QA target. Defaults to the current pull request URL when available.
+    required: false
+    default: ""
+  target-url:
+    description: Application URL to test.
+    required: false
+    default: ""
+  login-url:
+    description: Login URL when different from target URL.
+    required: false
+    default: ""
+  api-url:
+    description: API URL used by tests.
+    required: false
+    default: ""
+  config-file:
+    description: Optional swarm-flow QA config file path.
+    required: false
+    default: swarm-flow.qa.yaml
+  ai-provider:
+    description: "AI provider: openai, azure_openai, anthropic, bedrock, google, ollama, or openai_compatible."
+    required: false
+    default: openai
+  ai-model:
+    description: Model name for the selected provider.
+    required: false
+    default: gpt-5.4-mini
+  ai-base-url:
+    description: Base URL for Azure OpenAI, Ollama, or OpenAI-compatible providers.
+    required: false
+    default: ""
+  openai-api-key:
+    description: OpenAI API key for OpenAI or OpenAI-compatible providers.
+    required: false
+    default: ""
+  anthropic-api-key:
+    description: Anthropic API key for Anthropic providers.
+    required: false
+    default: ""
+  google-api-key:
+    description: Google AI API key for Gemini providers.
+    required: false
+    default: ""
+  aws-region:
+    description: AWS region for Bedrock.
+    required: false
+    default: ""
+  aws-profile:
+    description: Optional AWS profile for Bedrock when running outside GitHub-hosted OIDC.
+    required: false
+    default: ""
+  aws-role-to-assume:
+    description: AWS role ARN to assume for Bedrock access.
+    required: false
+    default: ""
+  aws-external-id:
+    description: AWS external ID for role assumption when required.
+    required: false
+    default: ""
+  bedrock-model-id:
+    description: Bedrock model ID to use directly.
+    required: false
+    default: ""
+  bedrock-inference-profile-id:
+    description: Bedrock inference profile ID to use as the model resource.
+    required: false
+    default: ""
+  bedrock-inference-profile-arn:
+    description: Bedrock inference profile ARN to use as the model resource.
+    required: false
+    default: ""
+  mode:
+    description: "QA mode: suggest, execute, or full."
+    required: false
+    default: execute
+  comment-mode:
+    description: Comment handling mode. Preview writes artifacts only and does not post comments.
+    required: false
+    default: preview
+  test-command:
+    description: Playwright or project test command.
+    required: false
+    default: npx playwright test --reporter=json
+  browser:
+    description: "Browser to run: chromium, firefox, or webkit."
+    required: false
+    default: chromium
+  headless:
+    description: Run browser headless.
+    required: false
+    default: "true"
+  timeout-ms:
+    description: Browser/test timeout in milliseconds.
+    required: false
+    default: "30000"
+  retries:
+    description: Test retry count.
+    required: false
+    default: "2"
+  screenshot:
+    description: "Screenshot policy: off, failures, or always."
+    required: false
+    default: failures
+  trace:
+    description: "Playwright trace policy: off, retain-on-failure, or on."
+    required: false
+    default: retain-on-failure
+  video:
+    description: "Playwright video policy: off, retain-on-failure, or on."
+    required: false
+    default: off
+  username-env:
+    description: Environment variable name containing the test username.
+    required: false
+    default: ""
+  password-env:
+    description: Environment variable name containing the test password.
+    required: false
+    default: ""
+  totp-secret-env:
+    description: Environment variable name containing the test TOTP secret.
+    required: false
+    default: ""
+  environment:
+    description: Environment profile name such as local, dev, preview, staging, or prod_like.
+    required: false
+    default: staging
+
+outputs:
+  runs-path:
+    description: Path containing swarm-flow run artifacts.
+    value: .runs
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: 22
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: npm install --package-lock=false
+
+    - name: Build swarm-flow
+      shell: bash
+      run: npm run build
+
+    - name: Run swarm-flow QA
+      shell: bash
+      env:
+        QA_TARGET: ${{ inputs.target || github.event.pull_request.html_url || github.ref_name }}
+        OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        GOOGLE_API_KEY: ${{ inputs.google-api-key }}
+      run: |
+        npx swarm-flow qa "$QA_TARGET" \
+          --backend playwright \
+          --config-file "${{ inputs.config-file }}" \
+          --target-url "${{ inputs.target-url }}" \
+          --login-url "${{ inputs.login-url }}" \
+          --api-url "${{ inputs.api-url }}" \
+          --test-command "${{ inputs.test-command }}" \
+          --mode "${{ inputs.mode }}" \
+          --comment-mode "${{ inputs.comment-mode }}" \
+          --environment "${{ inputs.environment }}" \
+          --ai-provider "${{ inputs.ai-provider }}" \
+          --ai-model "${{ inputs.ai-model }}" \
+          --ai-base-url "${{ inputs.ai-base-url }}" \
+          --aws-region "${{ inputs.aws-region }}" \
+          --aws-profile "${{ inputs.aws-profile }}" \
+          --aws-role-to-assume "${{ inputs.aws-role-to-assume }}" \
+          --aws-external-id "${{ inputs.aws-external-id }}" \
+          --bedrock-model-id "${{ inputs.bedrock-model-id }}" \
+          --bedrock-inference-profile-id "${{ inputs.bedrock-inference-profile-id }}" \
+          --bedrock-inference-profile-arn "${{ inputs.bedrock-inference-profile-arn }}" \
+          --browser "${{ inputs.browser }}" \
+          --headless "${{ inputs.headless }}" \
+          --timeout-ms "${{ inputs.timeout-ms }}" \
+          --retries "${{ inputs.retries }}" \
+          --screenshot "${{ inputs.screenshot }}" \
+          --trace "${{ inputs.trace }}" \
+          --video "${{ inputs.video }}" \
+          --username-env "${{ inputs.username-env }}" \
+          --password-env "${{ inputs.password-env }}" \
+          --totp-secret-env "${{ inputs.totp-secret-env }}"
+
+    - name: Upload swarm-flow QA artifacts
+      uses: actions/upload-artifact@v5
+      if: always()
+      with:
+        name: swarm-flow-qa-artifacts
+        path: .runs
+        if-no-files-found: warn
