@@ -1,12 +1,14 @@
 id: open-repair-loop
 trigger: on_validation_failure
-description: Convert failed validation into a bounded repair plan.
+description: Convert failed validation into a bounded repair loop. Follow skills/validation/repair-loop.md.
 conditions:
   - validation_status:failed
 actions:
-  - artifact:write repair_plan
-  - phase:retry implementation
+  - skill:invoke validation/repair-loop
+  - artifact:write repair_loop
+  - phase:block_advancement
   - log:event
 safety:
   external_writes: false
   retry_safe: true
+skill_reference: skills/validation/repair-loop.md

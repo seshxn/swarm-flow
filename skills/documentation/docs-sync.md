@@ -26,6 +26,24 @@ Do not use for internal-only refactors that do not change public behavior or arc
 - Code changes are known.
 - Design or ADR exists for architecture changes.
 
+# Process
+
+```
+Read code changes + technical design + ADR
+        ↓
+Identify affected doc categories:
+  user-facing / operator / developer / architecture / release notes
+        ↓
+For each affected doc:
+  update in-repo OR draft Confluence preview
+        ↓
+For each skipped doc: record rationale explicitly
+        ↓
+Link each doc update to shipped behavior (not aspirational plans)
+        ↓
+Register docs_update_report
+```
+
 # Exact steps
 
 1. Identify affected docs.
@@ -37,8 +55,10 @@ Do not use for internal-only refactors that do not change public behavior or arc
 
 | Shortcut | Reality |
 | --- | --- |
-| "The PR description is enough." | PR text disappears from day-to-day product use. |
-| "Docs can happen later." | Later docs often lose decision context. |
+| "The PR description is enough." | PR text disappears from day-to-day product use and agent context. |
+| "Docs can happen later." | Later docs lose decision context and often never get written. |
+| "Nothing changed externally." | Operator, developer, and architecture docs often need updates for internal changes. |
+| "I'll skip docs for this one." | Skipped docs must be recorded as intentionally skipped — silence is not an option. |
 
 # Verification
 

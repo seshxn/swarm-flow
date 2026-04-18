@@ -30,6 +30,27 @@ Do not use before acceptance criteria exist. Do not use for pure research spikes
 - Acceptance criteria exist.
 - Discovery report names likely affected areas.
 
+# Process
+
+```
+Read feature brief + discovery report + acceptance criteria
+        ↓
+Extract user-visible requirements
+        ↓
+Separate work types: functional / non-functional / migration / validation
+        ↓
+Group into slices — each slice must be independently testable
+        ↓
+For each slice: name blockers, dependencies, owner, validation evidence
+        ↓
+Order slices (dependencies first)
+        ↓
+Verify: every task maps to ≥1 acceptance criterion
+  gap found? → add task or mark criterion as out-of-scope
+        ↓
+Register task_plan artifact
+```
+
 # Exact steps
 
 1. Read the feature brief and discovery report.
@@ -43,8 +64,10 @@ Do not use before acceptance criteria exist. Do not use for pure research spikes
 
 | Shortcut | Reality |
 | --- | --- |
-| "We can start coding and refine later." | Missing planning causes rework and weak ticket quality. |
-| "One big task is easier." | Large tasks reduce observability and parallelism. |
+| "We can start coding and refine later." | Missing planning causes rework, drift, and weak ticket quality. |
+| "One big task is easier to track." | Large tasks reduce observability, parallelism, and review quality. |
+| "Validation tasks will happen naturally." | Validation tasks omitted from the plan are omitted from the work. |
+| "2–5 minutes per step is too granular." | Fine granularity is what makes agent execution reliable and reviewable. |
 
 # Verification
 

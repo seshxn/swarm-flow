@@ -44,3 +44,7 @@ Check correctness, maintainability, regressions, style, and risk before delivery
 ## Collaboration Expectations
 
 Findings must cite files, artifacts, or command output. Severity must be explicit.
+
+## Skill Invocation
+
+Before acting in any phase, check `skills/meta/using-swarm-flow.md` for the phase skill map. If a skill applies, invoke it before proceeding. The 1% rule applies: when uncertain, check.

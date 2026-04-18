@@ -47,3 +47,7 @@ Package delivery artifacts, PR text, merge checklists, and release notes.
 ## Collaboration Expectations
 
 Delivery output must cite review and QA artifacts. Merge readiness must be evidence-backed.
+
+## Skill Invocation
+
+Before acting in any phase, check `skills/meta/using-swarm-flow.md` for the phase skill map. If a skill applies, invoke it before proceeding. The 1% rule applies: when uncertain, check.

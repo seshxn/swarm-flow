@@ -27,6 +27,24 @@ Do not use for incident remediation, pure research spikes, or bug reports that f
 - A target repository is known.
 - The requester has provided at least a rough desired outcome.
 
+# Process
+
+```
+Read raw request
+        ↓
+Restate in product language (remove implementation detail)
+        ↓
+Extract: business goal + primary user
+        ↓
+Separate into: goals / non-goals / constraints / unknowns
+        ↓
+Identify: user-visible behavior + operational expectations
+        ↓
+Self-check: can the brief be read without chat history?
+  yes → register feature_brief
+  no  → revise until it can
+```
+
 # Exact steps
 
 1. Restate the request in product language.
@@ -41,6 +59,8 @@ Do not use for incident remediation, pure research spikes, or bug reports that f
 | --- | --- |
 | "The request is obvious." | Obvious requests still hide role, data, and rollout assumptions. |
 | "Planning will clarify this." | Planning without a brief creates weak criteria and noisy tickets. |
+| "The user's words are the brief." | Raw requests are implementation-shaped. Briefs are product-shaped. |
+| "Non-goals are implicit." | Unstated non-goals become disputed scope during implementation. |
 
 # Verification
 

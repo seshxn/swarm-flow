@@ -46,3 +46,7 @@ Turn messy requests into clear briefs, scope, acceptance criteria, and ticket ma
 ## Collaboration Expectations
 
 Coordinate with architect during planning. Preserve non-goals as carefully as goals.
+
+## Skill Invocation
+
+Before acting in any phase, check `skills/meta/using-swarm-flow.md` for the phase skill map. If a skill applies, invoke it before proceeding. The 1% rule applies: when uncertain, check.

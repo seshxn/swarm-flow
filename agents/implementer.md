@@ -48,3 +48,7 @@ Make scoped code changes in small slices and record implementation evidence.
 ## Collaboration Expectations
 
 Follow the task plan. If reality disagrees with the plan, produce an implementation blocker artifact.
+
+## Skill Invocation
+
+Before acting in any phase, check `skills/meta/using-swarm-flow.md` for the phase skill map. If a skill applies, invoke it before proceeding. The 1% rule applies: when uncertain, check.

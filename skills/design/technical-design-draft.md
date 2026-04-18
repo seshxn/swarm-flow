@@ -2,6 +2,9 @@
 id: design/technical-design-draft
 title: Technical Design Draft
 phase: design
+triggers:
+  - design phase begins
+  - implementation needs architecture, data flow, or integration direction
 inputs:
   - acceptance_criteria
   - task_plan
@@ -28,6 +31,30 @@ Do not use for trivial text-only changes with no behavioral or integration risk.
 - Task plan exists.
 - Discovery evidence is available.
 
+> **HARD-GATE:** Do not advance to implementation until the human has explicitly approved the technical design. Chat confirmation does not count. Approval must be recorded in `run.json` via `swarm-flow approve design`.
+
+# Process
+
+```
+Read acceptance criteria + task plan + discovery report
+        ↓
+Summarize chosen approach (1 paragraph)
+        ↓
+Name affected modules and interfaces
+        ↓
+Describe data flow and state changes
+        ↓
+Enumerate alternatives considered + why rejected
+        ↓
+Define validation strategy
+        ↓
+Define rollback posture
+        ↓
+Self-check: does design map to every acceptance criterion?
+  yes → register artifact → await approval
+  no  → revise
+```
+
 # Exact steps
 
 1. Summarize the chosen approach.
@@ -42,6 +69,8 @@ Do not use for trivial text-only changes with no behavioral or integration risk.
 | --- | --- |
 | "The code will be self-explanatory." | Reviewers need decision context before reading code. |
 | "There is only one way." | Tradeoffs still exist, including doing less. |
+| "Rollback is straightforward." | Rollback assumptions must be stated explicitly, not assumed. |
+| "Implementation will resolve this." | Unresolved design questions become unreviewed implementation decisions. |
 
 # Verification
 
