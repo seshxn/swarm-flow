@@ -1,8 +1,147 @@
 # swarm-flow
 
-swarm-flow is an AI-native software delivery engine that moves work from feature idea to shipped change using structured flows, specialist agents, engineering skills, hooks, connected tools, and policy gates.
+<p align="center">
+  <img src="assets/swarm-flow.png" alt="swarm-flow logo and orchestration graph" width="820">
+</p>
 
-It is not a prompt pack and it is not an autonomous merge bot. swarm-flow treats software delivery as a governed, artifact-driven state machine.
+swarm-flow turns Claude Code, Codex, and other coding agents into a governed software delivery workflow.
+
+It takes a plain-language request like "build this feature" or "review this PR" and runs it through explicit phases: intake, discovery, planning, design, implementation, validation, documentation, and delivery. Each phase has specialist agents, required artifacts, approval gates, hooks, and preview-safe connectors.
+
+It is not a prompt pack and it is not an autonomous merge bot. swarm-flow treats AI-assisted software delivery as an artifact-driven state machine.
+
+## Why Developers Use It
+
+Coding agents are powerful, but serious work needs more structure than a chat thread:
+
+- keep requirements, plans, designs, QA, and delivery notes as durable artifacts
+- make agents work through scoped specialist roles instead of one giant persona
+- require evidence before moving a run forward
+- preview Jira, Confluence, GitHub, Slack, and CI writes before anything external changes
+- resume a delivery run from `.runs/<run-id>/run.json` instead of reconstructing context
+- install workflow guidance into Claude Code and Codex projects
+
+swarm-flow is the layer between "vibe coding" and fully autonomous deployment: fast enough for solo builders, explicit enough for teams.
+
+## Quick Start
+
+The fastest way to try swarm-flow is to install the agent plugin, then ask your agent to start a governed run from a normal feature request.
+
+### Claude Code
+
+Once this repository is public, install from the Claude Code plugin marketplace:
+
+```text
+/plugin marketplace add seshxn/swarm-flow
+/plugin install swarm-flow@swarm-flow-marketplace
+```
+
+Then start a run:
+
+```text
+/swarm Allow admins to bulk reassign cases by region, with audit history and role checks.
+```
+
+Local fallback:
+
+```bash
+git clone https://github.com/seshxn/swarm-flow.git
+cd swarm-flow
+npm install
+npm run build
+npm link
+```
+
+Then in Claude Code:
+
+```text
+/plugin install /absolute/path/to/swarm-flow
+```
+
+### Codex
+
+Install the Codex skill from a clone:
+
+```bash
+git clone https://github.com/seshxn/swarm-flow.git ~/.codex/swarm-flow
+cd ~/.codex/swarm-flow
+npm install
+npm run build
+npm link
+./scripts/install-codex-skill.sh
+```
+
+Restart Codex, then make a normal delivery request in a target repository:
+
+```text
+Allow admins to bulk reassign cases by region, with audit history and role checks.
+```
+
+For project-level default behavior, initialize agent instructions in the target repository:
+
+```bash
+swarm-flow init --agent all
+```
+
+### CLI Development
+
+If you are contributing to swarm-flow itself or want to inspect the runtime directly:
+
+```bash
+npm install
+npm test
+npm run build
+
+node packages/cli/dist/index.js doctor
+node packages/cli/dist/index.js flows list
+node packages/cli/dist/index.js skills list
+```
+
+Start a feature run:
+
+```bash
+node packages/cli/dist/index.js start "Allow admins to bulk reassign cases in batches with audit logging"
+```
+
+Inspect it:
+
+```bash
+node packages/cli/dist/index.js status
+node packages/cli/dist/index.js resume
+node packages/cli/dist/index.js artifacts
+node packages/cli/dist/index.js preview jira
+node packages/cli/dist/index.js runs list
+```
+
+## Agent Integrations
+
+swarm-flow includes local integration bundles for Claude Code and Codex:
+
+- [plugins/claude-code](plugins/claude-code): Claude Code slash-command prompts such as `/swarm`, `/swarm-resume`, and `/swarm-preview`.
+- [plugins/codex](plugins/codex): Codex plugin manifest plus a `swarm-flow` skill designed to trigger from normal delivery requests.
+
+Inspect them from the CLI:
+
+```bash
+swarm-flow integrations list
+swarm-flow integrations show claude-code
+swarm-flow integrations show codex
+```
+
+For project-level default behavior, initialize agent instructions in the target repository if you have not already:
+
+```bash
+swarm-flow init --agent all
+```
+
+After that, agents should treat non-trivial requests like "Allow admins to bulk reassign cases by region" as swarm-flow runs by default. The CLI also supports explicit overrides when needed:
+
+```bash
+swarm-flow start "Allow admins to bulk reassign cases by region, with audit history and role checks."
+swarm-flow start feature --title "Bulk case reassignment" --goal "Allow admins to reassign cases by region"
+```
+
+See [docs/integrations.md](docs/integrations.md).
 
 ## Why It Exists
 
@@ -57,34 +196,6 @@ Live Jira, Confluence, GitHub, and CI writes are intentionally not enabled yet. 
 - **Agent**: specialist role with inputs, outputs, tools, boundaries, and escalation rules.
 - **Connector**: safe interface to external tools.
 - **Policy**: guardrail pack that decides whether a transition or write is allowed.
-
-## Quick Start
-
-```bash
-npm install
-npm test
-npm run build
-
-node packages/cli/dist/index.js doctor
-node packages/cli/dist/index.js flows list
-node packages/cli/dist/index.js skills list
-```
-
-Start a feature run:
-
-```bash
-node packages/cli/dist/index.js start "Allow admins to bulk reassign cases in batches with audit logging"
-```
-
-Inspect it:
-
-```bash
-node packages/cli/dist/index.js status
-node packages/cli/dist/index.js resume
-node packages/cli/dist/index.js artifacts
-node packages/cli/dist/index.js preview jira
-node packages/cli/dist/index.js runs list
-```
 
 ## CLI Commands
 
@@ -170,6 +281,7 @@ Package responsibilities:
 
 ```text
 docs/          concept documentation and walkthroughs
+assets/        project images and launch media
 flows/         governed SDLC flow definitions
 skills/        reusable process cards by phase
 hooks/         transition automation specs
@@ -194,65 +306,16 @@ swarm-flow defaults to governed behavior:
 
 The project is deliberately honest about unsupported capability. Preview connectors are not live API clients. Full live integrations should be added only when they preserve dry-run, preview, idempotency, rollback metadata, and audit logging.
 
-## Agent Integrations
+## Launch and Community
 
-swarm-flow includes local integration bundles for Claude Code and Codex:
+If you want to help shape the project, the best places to start are:
 
-- [plugins/claude-code](plugins/claude-code): Claude Code slash-command prompts such as `/swarm`, `/swarm-resume`, and `/swarm-preview`.
-- [plugins/codex](plugins/codex): Codex plugin manifest plus a `swarm-flow` skill designed to trigger from normal delivery requests.
+- try a local run and open an issue with the artifact trail it produced
+- contribute a flow, skill, hook, policy, or preview-safe connector
+- test the Claude Code and Codex integration bundles in a real repository
+- help tighten the launch plan in [docs/launch-plan.md](docs/launch-plan.md)
 
-Inspect them from the CLI:
-
-```bash
-swarm-flow integrations list
-swarm-flow integrations show claude-code
-swarm-flow integrations show codex
-```
-
-See [docs/integrations.md](docs/integrations.md).
-
-For project-level default behavior, initialize agent instructions in the target repository:
-
-```bash
-swarm-flow init --agent all
-```
-
-After that, agents should treat non-trivial requests like "Allow admins to bulk reassign cases by region" as swarm-flow runs by default. The CLI also supports explicit overrides when needed:
-
-```bash
-swarm-flow start "Allow admins to bulk reassign cases by region, with audit history and role checks."
-swarm-flow start feature --title "Bulk case reassignment" --goal "Allow admins to reassign cases by region"
-```
-
-### Public Plugin Installation
-
-Once this repository is public, other users can install swarm-flow as an agent plugin.
-
-Claude Code marketplace-style install:
-
-```text
-/plugin marketplace add seshxn/swarm-flow
-/plugin install swarm-flow@swarm-flow-marketplace
-```
-
-Claude Code direct/local fallback:
-
-```text
-/plugin install /absolute/path/to/swarm-flow
-```
-
-Codex skill install:
-
-```bash
-git clone https://github.com/seshxn/swarm-flow.git ~/.codex/swarm-flow
-cd ~/.codex/swarm-flow
-npm install
-npm run build
-npm link
-./scripts/install-codex-skill.sh
-```
-
-See [docs/plugin-distribution.md](docs/plugin-distribution.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution lanes and verification expectations.
 
 ## Roadmap
 
