@@ -5,6 +5,14 @@
   "type": "module",
   "packageManager": "npm@10.9.3",
   "private": false,
+  "homepage": "https://github.com/seshxn/swarm-flow#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/seshxn/swarm-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/seshxn/swarm-flow/issues"
+  },
   "workspaces": [
     "packages/*"
   ],
@@ -21,7 +29,12 @@
   },
   "keywords": [
     "ai-agents",
+    "ai-coding-agents",
+    "claude-code",
+    "codex",
+    "developer-tools",
     "software-delivery",
+    "spec-driven-development",
     "workflow",
     "sdlc",
     "orchestration"
