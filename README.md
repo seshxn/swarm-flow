@@ -327,5 +327,7 @@ Near-term milestones:
 4. Add opt-in Jira, Confluence, GitHub, and CI live adapters.
 5. Add richer artifact validation and schema checks.
 6. Add agent adapter examples for popular coding-agent environments.
+7. Adopt worktree-first contribution and delivery workflow.
+8. Strengthen CI/security/SBOM and release hygiene baselines.
 
-See [docs/roadmap.md](docs/roadmap.md).
+See [docs/roadmap.md](docs/roadmap.md), [docs/modernization-plan.md](docs/modernization-plan.md), and [docs/worktree-development.md](docs/worktree-development.md).
