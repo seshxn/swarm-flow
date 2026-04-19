@@ -1,0 +1,10 @@
+id: read_repo
+trigger: before_phase
+description: Read repository context before discovery.
+conditions: []
+actions:
+  - connector:filesystem.search
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

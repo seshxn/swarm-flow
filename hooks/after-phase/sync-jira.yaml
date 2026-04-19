@@ -1,0 +1,11 @@
+id: sync_jira
+trigger: after_phase
+description: Prepare Jira sync preview after ticketing.
+conditions:
+  - artifact_exists:jira_mapping
+actions:
+  - connector:jira.create_or_update
+  - log:event
+safety:
+  external_writes: preview_only
+  retry_safe: true

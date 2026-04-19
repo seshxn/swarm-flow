@@ -1,0 +1,11 @@
+id: run_typecheck
+trigger: before_phase
+description: Run typecheck before validation.
+conditions:
+  - artifact_exists:code_changes
+actions:
+  - command:npm_typecheck
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: false

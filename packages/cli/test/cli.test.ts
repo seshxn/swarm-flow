@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -465,5 +465,66 @@ describe("CLI", () => {
       }
     ]);
     expect(output.join("\n")).toContain("Comment selection recorded");
+  });
+
+  it("refuses to apply preview payloads as live connector writes", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const flowPath = join(workspace, "flow.yaml");
+    await writeFile(
+      flowPath,
+      [
+        "id: feature-default",
+        "name: Feature Delivery",
+        "phases:",
+        "  - id: intake",
+        "    description: Normalize",
+        "    agents: [pm]",
+        "    required_outputs: [feature_brief]"
+      ].join("\n"),
+      "utf8"
+    );
+    const previewPath = join(workspace, "filesystem.preview.json");
+    await writeFile(
+      previewPath,
+      JSON.stringify(
+        {
+          runId: "run-placeholder",
+          target: "filesystem",
+          mode: "preview",
+          operation: "create",
+          payload: {
+            path: "should-not-exist.txt",
+            content: "live write bypass"
+          }
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "start",
+      "feature",
+      "--title",
+      "Preview safety",
+      "--goal",
+      "Keep writes preview-only",
+      "--flow",
+      flowPath
+    ]);
+
+    await expect(program.parseAsync(["node", "swarm-flow", "apply", "filesystem", "filesystem.preview.json"])).rejects.toThrow(
+      "Live connector apply is not supported"
+    );
+    await expect(readFile(join(workspace, "should-not-exist.txt"), "utf8")).rejects.toThrow();
   });
 });

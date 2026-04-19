@@ -1,0 +1,10 @@
+id: load_project_context
+trigger: before_phase
+description: Load local project context before the phase begins.
+conditions: []
+actions:
+  - connector:filesystem.search
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

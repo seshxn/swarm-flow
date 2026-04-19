@@ -1,0 +1,10 @@
+id: read_confluence
+trigger: before_phase
+description: Read Confluence context when available.
+conditions: []
+actions:
+  - connector:confluence.search
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

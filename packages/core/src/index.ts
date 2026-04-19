@@ -7,6 +7,29 @@ export const hookSetSchema = z
   })
   .strict();
 
+export const hookDefinitionSchema = z
+  .object({
+    id: z.string().min(1),
+    trigger: z.enum([
+      "before_phase",
+      "after_phase",
+      "before_run",
+      "after_run",
+      "on_artifact_created",
+      "on_validation_failure",
+      "on_ci_failure"
+    ]),
+    phase: z.string().optional(),
+    description: z.string().min(1),
+    conditions: z.array(z.string()).default([]),
+    actions: z.array(z.string()).min(1),
+    safety: z.object({
+      external_writes: z.union([z.boolean(), z.literal("preview_only")]).default(false),
+      retry_safe: z.boolean().default(false)
+    }).optional()
+  })
+  .strict();
+
 export const phaseSchema = z
   .object({
     id: z.string().min(1),
@@ -36,6 +59,7 @@ export const flowSchema = z
   .strict();
 
 export type HookSet = z.infer<typeof hookSetSchema>;
+export type HookDefinition = z.infer<typeof hookDefinitionSchema>;
 export type Phase = z.infer<typeof phaseSchema>;
 export type Flow = z.infer<typeof flowSchema>;
 
@@ -78,6 +102,16 @@ export type ExternalPostingSelection = {
   }>;
 };
 
+export type HookExecution = {
+  id: string;
+  trigger: string;
+  phase?: string;
+  status: "pending" | "running" | "completed" | "failed";
+  started_at?: string;
+  completed_at?: string;
+  error?: string;
+};
+
 export type RunState = {
   id: string;
   repo: {
@@ -94,7 +128,7 @@ export type RunState = {
   pending_phases: string[];
   artifact_registry: Record<string, ArtifactRegistryEntry>;
   agent_executions: unknown[];
-  hook_executions: unknown[];
+  hook_executions: HookExecution[];
   policy_decisions: PolicyDecision[];
   approvals: Record<string, ApprovalRecord>;
   tool_writes: unknown[];

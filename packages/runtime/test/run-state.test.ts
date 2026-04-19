@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -126,5 +126,69 @@ describe("FlowRuntime", () => {
     await expect(runtime.completePhase(planning.id, "planning", ["acceptance_criteria", "task_plan"])).rejects.toThrow(
       "outputs are not registered artifacts"
     );
+  });
+
+  it("does not advance when an exit hook fails", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
+    await mkdir(join(workspace, "hooks", "after-phase"), { recursive: true });
+    await writeFile(
+      join(workspace, "hooks", "after-phase", "fail-validation.yaml"),
+      [
+        "id: fail-validation",
+        "trigger: after_phase",
+        "description: fail validation",
+        "conditions: []",
+        "actions:",
+        "  - command:node -e \"process.exit(7)\""
+      ].join("\n"),
+      "utf8"
+    );
+
+    const gatedFlow = {
+      id: "feature-default",
+      name: "Feature Delivery",
+      phases: [
+        {
+          id: "intake",
+          description: "Normalize request",
+          agents: ["pm"],
+          required_outputs: ["feature_brief"],
+          hooks: {
+            after: ["fail_validation"]
+          }
+        },
+        {
+          id: "planning",
+          description: "Plan delivery",
+          agents: ["pm"],
+          required_outputs: ["acceptance_criteria"],
+          dependencies: ["intake"]
+        }
+      ]
+    };
+    const runtime = new FlowRuntime({
+      repoRoot: workspace,
+      store: new FileRunStore(workspace)
+    });
+    const run = await runtime.startFeatureRun({
+      flow: gatedFlow,
+      title: "Feature",
+      goal: "Goal",
+      now: new Date("2026-04-17T12:00:00.000Z")
+    });
+
+    await expect(runtime.completePhase(run.id, "intake", ["feature_brief"])).rejects.toThrow(
+      "hook fail_validation failed"
+    );
+
+    const persisted = await new FileRunStore(workspace).load(run.id);
+    expect(persisted.completed_phases).toEqual([]);
+    expect(persisted.current_phase).toBe("intake");
+    expect(persisted.hook_executions[0]).toMatchObject({
+      id: "fail_validation",
+      trigger: "after_phase",
+      phase: "intake",
+      status: "failed"
+    });
   });
 });

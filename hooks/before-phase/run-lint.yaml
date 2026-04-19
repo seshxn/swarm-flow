@@ -1,0 +1,10 @@
+id: run_lint
+trigger: before_phase
+description: Record lint validation intent when a lint command is available.
+conditions:
+  - artifact_exists:code_changes
+actions:
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

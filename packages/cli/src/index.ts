@@ -13,6 +13,7 @@ import {
   type QaBackendId
 } from "@swarm-flow/qa";
 import { validateFlow, type RunScope, type RunState, type RunTarget } from "@swarm-flow/core";
+import { StandardAgentAdapter } from "@swarm-flow/adapters";
 
 export type CliIo = {
   cwd?: string;
@@ -157,6 +158,89 @@ export function createProgram(io: CliIo = {}): Command {
         scope: "epic",
         target: parseTarget(target)
       });
+    });
+
+  program
+    .command("apply")
+    .argument("<connector>", "Connector ID (e.g. filesystem, git, github)")
+    .argument("<preview_file>", "Path to the preview JSON payload")
+    .description("Validate a connector preview file; live apply is disabled in v0.1")
+    .action(async (connector: string, previewFile: string) => {
+      const store = new FileRunStore(cwd);
+      const run = await store.latest();
+      if (!run) {
+        throw new Error("No active run found. This command requires a run context.");
+      }
+
+      const rawPreview = await readFile(resolve(cwd, previewFile), "utf8");
+      const previewPayload = JSON.parse(rawPreview);
+      const reasons = validateApplyPreview(run, connector, previewPayload);
+      const message = [
+        "Live connector apply is not supported in v0.1. Keep writes in preview mode and record user selections instead.",
+        ...reasons
+      ].join(" ");
+      run.policy_decisions = [
+        ...run.policy_decisions,
+        {
+          allowed: false,
+          reasons: [message]
+        }
+      ];
+      await store.save(run);
+      throw new Error(message);
+    });
+
+  program
+    .command("auto")
+    .description("Execute an autonomous agent loop for the current phase")
+    .action(async () => {
+      const store = new FileRunStore(cwd);
+      let run = await store.latest();
+      if (!run) {
+        throw new Error("No active run found. This command requires a run context.");
+      }
+
+      const phaseId = run.current_phase;
+      const phase = run.flow_snapshot.phases.find(p => p.id === phaseId);
+      if (!phase) {
+         throw new Error(`Current phase ${phaseId} not found in flow definition`);
+      }
+      
+      const runtime = new FlowRuntime({ 
+        repoRoot: cwd, 
+        store
+      });
+
+      stdout(`Executing headless agent loop for phase: ${phaseId}...`);
+      
+      const adapter = new StandardAgentAdapter();
+      const result = await adapter.invoke({
+        runId: run.id,
+        repoRoot: cwd,
+        agentId: phase.agents[0] || "primary",
+        phaseId,
+        goal: run.feature.goal,
+        requiredOutputs: phase.required_outputs,
+        contextFiles: {} // Future improvement: Read previous phase artifacts or git diff
+      });
+
+      if (!result.ok) {
+         throw new Error(`Agent execution failed: ${result.reasons.join(", ")}`);
+      }
+
+      for (const [artifactId, content] of Object.entries(result.artifacts_created)) {
+         stdout(`Registering artifact: ${artifactId}`);
+         const mediaType = artifactId.endsWith('.json') ? 'application/json' : 'text/markdown';
+         run = await runtime.registerArtifact(run.id, {
+           id: artifactId,
+           fileName: `${artifactId}.md`,
+           mediaType,
+           content,
+           phaseId
+         });
+      }
+      
+      stdout(`\u2705 Auto-execution complete for phase ${phaseId}.`);
     });
 
   program
@@ -607,6 +691,50 @@ async function readQaConfigFile(
     }
     throw error;
   }
+}
+
+function validateApplyPreview(run: RunState, connector: string, previewPayload: unknown): string[] {
+  const reasons: string[] = [];
+  if (!isRecord(previewPayload)) {
+    return ["Preview payload must be a JSON object."];
+  }
+
+  const target = stringValue(previewPayload.target) ?? stringValue(previewPayload.connector);
+  if (target && target !== connector) {
+    reasons.push(`Preview target ${target} does not match requested connector ${connector}.`);
+  }
+
+  const mode = stringValue(previewPayload.mode);
+  if (mode && mode !== "preview") {
+    reasons.push(`Preview payload mode must be preview; received ${mode}.`);
+  }
+
+  const runId = stringValue(previewPayload.runId) ?? stringValue(previewPayload.run_id);
+  if (runId && runId !== run.id) {
+    reasons.push(`Preview payload belongs to run ${runId}, not active run ${run.id}.`);
+  }
+
+  const idempotencyKey = stringValue(previewPayload.idempotencyKey) ?? stringValue(previewPayload.idempotency_key);
+  if (!idempotencyKey) {
+    reasons.push("Preview payload is missing an idempotency key.");
+  } else {
+    const recorded = run.connector_write_previews.some(
+      (preview) => preview.connector_id === connector && preview.idempotency_key === idempotencyKey
+    );
+    if (!recorded) {
+      reasons.push(`Preview idempotency key ${idempotencyKey} is not recorded on the active run.`);
+    }
+  }
+
+  return reasons;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
 }
 
 function currentPhaseOutputs(run: Awaited<ReturnType<FileRunStore["load"]>>): string[] {

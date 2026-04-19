@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   createCiConnector,
   createConfluenceConnector,
@@ -9,6 +12,15 @@ import {
   createSlackConnector,
   discoverConnectorCapabilities
 } from "../src/index.js";
+
+let workspace: string | undefined;
+
+afterEach(async () => {
+  if (workspace) {
+    await rm(workspace, { recursive: true, force: true });
+    workspace = undefined;
+  }
+});
 
 describe("preview connectors", () => {
   it("keeps external connector writes in preview mode by default", async () => {
@@ -72,5 +84,33 @@ describe("preview connectors", () => {
     expect(capabilities.connectors.github).toContain("preview");
     expect(capabilities.connectors.jira).toContain("preview");
     expect(capabilities.connectors.slack).toContain("preview");
+  });
+
+  it("refuses live local connector writes by default", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-connectors-"));
+    const filesystem = createFilesystemConnector(workspace);
+    const git = createGitConnector(workspace);
+
+    await expect(
+      filesystem.create({
+        preview: false,
+        idempotencyKey: "run-1:filesystem:create",
+        payload: {
+          path: "created-by-live-apply.txt",
+          content: "should not be written"
+        }
+      })
+    ).rejects.toThrow("filesystem connector only supports preview writes");
+
+    await expect(
+      git.update({
+        preview: false,
+        idempotencyKey: "run-1:git:update",
+        payload: {
+          command: "status",
+          args: []
+        }
+      })
+    ).rejects.toThrow("git connector only supports preview writes");
   });
 });
