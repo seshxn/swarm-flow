@@ -13,6 +13,37 @@ swarm-flow is early, and the most useful contributions are the ones that strengt
 - **Examples**: contribute realistic sample runs with acceptance criteria, design notes, QA reports, and connector previews.
 - **Integrations**: test the Claude Code and Codex bundles against real repositories and report friction.
 
+## Worktree-First Contribution Workflow
+
+Use separate git worktrees for independent slices so each PR stays focused.
+
+```bash
+mkdir -p ../.worktrees/swarm-flow
+git fetch origin
+git worktree add ../.worktrees/swarm-flow/SF-142-governance -b feat/SF-142-governance-worktree-standard main
+```
+
+Use one branch per worktree, run verification in that worktree, then open a PR to `main`.
+
+See [docs/worktree-development.md](docs/worktree-development.md) for naming, isolation, and cleanup.
+
+## Commit and PR Standards
+
+Use semantic commit messages:
+
+- `feat: add risk-tier policy gate for connector writes`
+- `fix: block transition when required artifact is missing`
+- `docs: add worktree development standard`
+- `test: add runtime transition regression coverage`
+- `ci: add security audit workflow`
+
+PRs should include:
+
+- summary of behavior or governance change
+- verification evidence (`npm test`, `npm run typecheck`, `npm run build`)
+- artifact impact (which artifacts/flows/policies changed)
+- risk notes for governance, approvals, connector writes, or run progression
+
 ## Design Rules
 
 - Keep flows, policies, artifacts, hooks, connectors, and role cards as separate concepts.

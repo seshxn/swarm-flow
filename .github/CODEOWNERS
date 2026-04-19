@@ -1,0 +1,20 @@
+# Default owners
+* @seshxn
+
+# Core runtime and policy logic
+/packages/core/ @seshxn
+/packages/runtime/ @seshxn
+/policies/ @seshxn
+/flows/ @seshxn
+
+# Connector boundaries and external integrations
+/packages/connectors/ @seshxn
+/connectors/ @seshxn
+
+# CLI and docs
+/packages/cli/ @seshxn
+/docs/ @seshxn
+
+# CI and repository governance
+/.github/ @seshxn
+/AGENTS.md @seshxn
