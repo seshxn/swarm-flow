@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  collectBrowserArtifacts,
+  renderAccessibilityReport,
+  renderBrowserArtifactsManifest,
   renderGithubCommentsPreview,
   renderQaContext,
   renderQaReport,
@@ -18,26 +21,89 @@ export function createPlaywrightQaBackend(): QaBackend {
       await mkdir(request.outputDirectory, { recursive: true });
       const command = request.testCommand ?? "npx playwright test --reporter=json";
       const execution = await runCommand(command, request.workingDirectory);
+      let accessibilityExecution: { exitCode: number; stdout: string; stderr: string } | undefined;
+      if (request.config?.accessibility.command) {
+        if (execution.exitCode === 0) {
+          accessibilityExecution = await runCommand(request.config.accessibility.command, request.workingDirectory);
+        } else {
+          accessibilityExecution = {
+            exitCode: 1,
+            stdout: "",
+            stderr: "Accessibility command did not run because the main QA command failed."
+          };
+        }
+      }
       const completedAt = new Date().toISOString();
-      const success = execution.exitCode === 0;
+      const success = execution.exitCode === 0 && (!request.config?.accessibility.command || accessibilityExecution?.exitCode === 0);
+
+      const browserArtifacts = await collectBrowserArtifacts({
+        artifactDirectories: request.config?.artifacts.directories ?? [
+          "test-results",
+          "playwright-report",
+          ".runs/<run-id>/artifacts"
+        ],
+        runId: request.runId,
+        workingDirectory: request.workingDirectory,
+        outputDirectory: request.outputDirectory,
+        mainCommand: {
+          command,
+          execution
+        },
+        accessibilityCommand: request.config?.accessibility.command && accessibilityExecution
+          ? {
+              command: request.config.accessibility.command,
+              execution: accessibilityExecution
+            }
+          : undefined
+      });
 
       const qaContext = join(request.outputDirectory, "qa-context.json");
       const qaReport = join(request.outputDirectory, "qa-report.md");
       const testGapReport = join(request.outputDirectory, "test-gap-report.md");
       const validationStatus = join(request.outputDirectory, "validation-status.md");
       const githubCommentsPreview = join(request.outputDirectory, "github-comments.preview.json");
+      const browserArtifactsPath = join(request.outputDirectory, "browser-artifacts.json");
+      const accessibilityReport = join(request.outputDirectory, "accessibility-report.md");
 
       await writeFile(qaContext, renderQaContext(request), "utf8");
-      await writeFile(qaReport, renderQaReport({ request, success, execution }), "utf8");
-      await writeFile(testGapReport, renderTestGapReport({ request, success }), "utf8");
-      await writeFile(validationStatus, renderValidationStatus({ request, success, execution }), "utf8");
+      await writeFile(browserArtifactsPath, renderBrowserArtifactsManifest(browserArtifacts), "utf8");
+      if (request.config?.accessibility.command) {
+        await writeFile(
+          accessibilityReport,
+          renderAccessibilityReport({
+            request,
+            execution: accessibilityExecution ?? {
+              exitCode: 1,
+              stdout: "",
+              stderr: "Accessibility command did not run."
+            },
+            command: request.config.accessibility.command
+          }),
+          "utf8"
+        );
+      }
+      await writeFile(
+        qaReport,
+        renderQaReport({ request, success, execution, browserArtifacts }),
+        "utf8"
+      );
+      await writeFile(
+        testGapReport,
+        renderTestGapReport({ request, success, browserArtifacts }),
+        "utf8"
+      );
+      await writeFile(
+        validationStatus,
+        renderValidationStatus({ request, success, execution, browserArtifacts }),
+        "utf8"
+      );
       await writeFile(githubCommentsPreview, renderGithubCommentsPreview({ request, success }), "utf8");
 
       return {
         success,
         backend: "playwright",
         command,
-        exitCode: execution.exitCode,
+        exitCode: success ? 0 : (execution.exitCode !== 0 ? execution.exitCode : accessibilityExecution?.exitCode ?? 1),
         startedAt,
         completedAt,
         artifacts: {
@@ -45,9 +111,17 @@ export function createPlaywrightQaBackend(): QaBackend {
           qaReport,
           testGapReport,
           validationStatus,
+          browserArtifacts: browserArtifactsPath,
+          accessibilityReport: request.config?.accessibility.command ? accessibilityReport : undefined,
           githubCommentsPreview
         },
-        errors: success ? [] : [execution.stderr || "Playwright command failed"]
+        errors: success
+          ? []
+          : [
+              execution.exitCode !== 0
+                ? execution.stderr || "Playwright command failed"
+                : accessibilityExecution?.stderr || "Accessibility command failed"
+            ]
       } satisfies QaExecutionResult;
     }
   };
