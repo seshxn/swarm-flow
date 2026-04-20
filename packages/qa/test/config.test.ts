@@ -37,6 +37,37 @@ describe("QA config", () => {
       region: "us-east-1"
     });
     expect(config.mode).toBe("execute");
+    expect(config.artifacts.directories).toEqual([
+      "test-results",
+      "playwright-report",
+      ".runs/<run-id>/artifacts"
+    ]);
+  });
+
+  it("merges artifact and accessibility overrides across config layers", () => {
+    const config = normalizeQaConfig({
+      fileConfig: {
+        qa: {
+          accessibility: {
+            command: "npx playwright test accessibility"
+          },
+          artifacts: {
+            directories: ["test-results", "playwright-report"]
+          }
+        }
+      },
+      actionInputs: {
+        accessibilityCommand: "npm run qa:accessibility",
+        artifactDirectories: "reports/one,reports/two"
+      },
+      cliFlags: {
+        accessibilityCommand: "npx playwright test --grep accessibility",
+        artifactDirectories: ["final-results"]
+      }
+    });
+
+    expect(config.accessibility.command).toBe("npx playwright test --grep accessibility");
+    expect(config.artifacts.directories).toEqual(["final-results"]);
   });
 
   it("maps Bedrock provider config to a CrewAI-compatible model string", () => {

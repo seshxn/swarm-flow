@@ -92,6 +92,8 @@ type QaOptions = {
   previewUrl?: string;
   healthcheckUrl?: string;
   testCommand?: string;
+  accessibilityCommand?: string;
+  artifactDirectories?: string;
   mode?: "suggest" | "execute" | "full";
   commentMode?: "preview" | "summary";
   environment?: string;
@@ -308,6 +310,8 @@ export function createProgram(io: CliIo = {}): Command {
     .option("--preview-url <url>", "deploy preview URL")
     .option("--healthcheck-url <url>", "URL to check before QA execution")
     .option("--test-command <command>", "test command to run for the QA backend")
+    .option("--accessibility-command <command>", "accessibility command to run for the QA backend")
+    .option("--artifact-directories <paths>", "comma-separated artifact directories to scan")
     .option("--mode <mode>", "QA mode: suggest, execute, or full")
     .option("--comment-mode <mode>", "comment behavior: preview or summary")
     .option("--environment <name>", "environment profile name")
@@ -361,6 +365,8 @@ export function createProgram(io: CliIo = {}): Command {
           previewUrl: options.previewUrl,
           healthcheckUrl: options.healthcheckUrl,
           testCommand: options.testCommand,
+          accessibilityCommand: options.accessibilityCommand,
+          artifactDirectories: options.artifactDirectories,
           mode: options.mode,
           commentMode: options.commentMode,
           environment: options.environment,

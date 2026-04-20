@@ -433,7 +433,23 @@ describe("CLI", () => {
   it("runs the Playwright QA backend and writes governed QA artifacts", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     await import("node:fs/promises").then(({ writeFile }) =>
-      writeFile(join(workspace ?? "", "fake-test.mjs"), "process.exit(0);\n", "utf8")
+      Promise.all([
+        writeFile(
+          join(workspace ?? "", "fake-test.mjs"),
+          [
+            "import { mkdirSync, writeFileSync } from 'node:fs';",
+            "mkdirSync('playwright-report', { recursive: true });",
+            "writeFileSync('playwright-report/index.html', '<html>report</html>');",
+            "mkdirSync('test-results/spec', { recursive: true });",
+            "writeFileSync('test-results/spec/trace.zip', 'trace');",
+            "writeFileSync('test-results/spec/screenshot.png', 'screenshot');",
+            "writeFileSync('test-results/spec/video.webm', 'video');",
+            "process.exit(0);"
+          ].join("\n"),
+          "utf8"
+        ),
+        writeFile(join(workspace ?? "", "a11y.mjs"), "console.log('a11y ok');\nprocess.exit(0);\n", "utf8")
+      ])
     );
     const output: string[] = [];
     const program = createProgram({
@@ -452,7 +468,9 @@ describe("CLI", () => {
       "--target-url",
       "https://preview.example.com",
       "--test-command",
-      "node fake-test.mjs"
+      "node fake-test.mjs",
+      "--accessibility-command",
+      "node a11y.mjs"
     ]);
 
     const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
@@ -461,7 +479,20 @@ describe("CLI", () => {
     const preview = JSON.parse(
       await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "github-comments.preview.json"), "utf8")
     );
+    const browserArtifacts = JSON.parse(
+      await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "browser-artifacts.json"), "utf8")
+    );
+    const accessibilityReport = await readFile(
+      join(workspace, ".runs", runId ?? "missing", "artifacts", "accessibility-report.md"),
+      "utf8"
+    );
     expect(qaReport).toContain("Playwright QA Report");
+    expect(qaReport).toContain("Browser artifacts");
+    expect(browserArtifacts.artifacts.trace[0]).toContain("trace.zip");
+    expect(browserArtifacts.artifacts.screenshot[0]).toContain("screenshot.png");
+    expect(browserArtifacts.artifacts.video[0]).toContain("video.webm");
+    expect(browserArtifacts.artifacts.html[0]).toContain("playwright-report/index.html");
+    expect(accessibilityReport).toContain("Result: passed");
     expect(preview.mode).toBe("preview");
     expect(output.join("\n")).toContain("QA backend passed");
   });
