@@ -26,6 +26,14 @@ Swarms are still governed skill executions. A review swarm or QA swarm may use m
 
 Skills should read like workflow cards a disciplined team would actually use. They should not say "ensure quality" without defining evidence. Every skill needs a finish line: an artifact, verification command, approval, or explicit escalation.
 
+Run the bundled skill quality gate before publishing skill changes:
+
+```bash
+swarm-flow skills lint
+```
+
+The linter checks frontmatter and required workflow sections so skill cards remain executable rather than becoming reference prose.
+
 ## Example
 
 See [skills/planning/task-breakdown.md](../skills/planning/task-breakdown.md).

@@ -10,17 +10,6 @@ It takes a plain-language request like "build this feature" or "review this PR" 
 
 It is not a prompt pack and it is not an autonomous merge bot. swarm-flow treats AI-assisted software delivery as an artifact-driven state machine.
 
-## Why Developers Use It
-
-Coding agents are powerful, but serious work needs more structure than a chat thread:
-
-- keep requirements, plans, designs, QA, and delivery notes as durable artifacts
-- make agents work through scoped specialist roles instead of one giant persona
-- require evidence before moving a run forward
-- preview Jira, Confluence, GitHub, Slack, and CI writes before anything external changes
-- resume a delivery run from `.runs/<run-id>/run.json` instead of reconstructing context
-- install workflow guidance into Claude Code and Codex projects
-
 swarm-flow is the layer between "vibe coding" and fully autonomous deployment: fast enough for solo builders, explicit enough for teams.
 
 ## Quick Start
@@ -108,6 +97,11 @@ Inspect it:
 ```bash
 node packages/cli/dist/index.js status
 node packages/cli/dist/index.js resume
+node packages/cli/dist/index.js phase
+node packages/cli/dist/index.js context pack
+node packages/cli/dist/index.js artifact add feature_brief path/to/feature-brief.md
+node packages/cli/dist/index.js policy check
+node packages/cli/dist/index.js complete intake
 node packages/cli/dist/index.js artifacts
 node packages/cli/dist/index.js preview jira
 node packages/cli/dist/index.js runs list
@@ -177,6 +171,8 @@ v0.1 is a CLI-first local orchestration foundation. It includes:
 - file-backed run state
 - artifact registration
 - phase transition checks
+- agent-facing phase, artifact, policy, completion, and context-pack commands
+- bundled skill linting
 - approval recording
 - connector preview recording
 - preview-safe connector contracts
@@ -208,12 +204,18 @@ Live Jira, Confluence, GitHub, and CI writes are intentionally not enabled yet. 
 | `swarm-flow qa <target>` | Start a standalone QA swarm run from a PR, ticket, URL, or test target. |
 | `swarm-flow status` | Show current run status. |
 | `swarm-flow resume` | Show next actionable phase and required outputs. |
+| `swarm-flow phase` | Show the current phase contract, agents, outputs, and transition conditions. |
+| `swarm-flow context pack` | Write a compact current-phase context pack for an agent. |
+| `swarm-flow artifact add <id> <file>` | Register a local file as a run artifact. |
+| `swarm-flow policy check` | Evaluate policy gates for the current phase. |
+| `swarm-flow complete <phase>` | Complete the current phase after artifact and policy gates pass. |
 | `swarm-flow artifacts` | List registered artifacts. |
 | `swarm-flow flows list` | List bundled flows. |
 | `swarm-flow flows inspect <id>` | Show a flow summary. |
 | `swarm-flow flows validate <path>` | Validate a flow file. |
 | `swarm-flow skills list` | List bundled skills. |
 | `swarm-flow skills inspect <id>` | Print a skill card. |
+| `swarm-flow skills lint` | Validate bundled skill cards for required workflow sections. |
 | `swarm-flow integrations list` | List Claude Code and Codex integration bundles. |
 | `swarm-flow integrations show <id>` | Show integration install notes. |
 | `swarm-flow approve <phase>` | Record a human approval. |

@@ -74,6 +74,17 @@ describe("agent integration plugins", () => {
     const skillPath = join(root, "plugins/codex/skills/swarm-flow/SKILL.md");
     expect(existsSync(skillPath)).toBe(true);
     expect(readFileSync(skillPath, "utf8")).toContain('swarm-flow start "<user request>"');
+    for (const skill of [
+      "swarm-flow-phase",
+      "swarm-flow-implementation",
+      "swarm-flow-validation",
+      "swarm-flow-preview-writes",
+      "swarm-flow-repair-loop"
+    ]) {
+      const phaseSkillPath = join(root, "plugins/codex/skills", skill, "SKILL.md");
+      expect(existsSync(phaseSkillPath)).toBe(true);
+      expect(readFileSync(phaseSkillPath, "utf8")).toContain("swarm-flow");
+    }
     expect(marketplace.plugins).toContainEqual(
       expect.objectContaining({
         name: "swarm-flow",
