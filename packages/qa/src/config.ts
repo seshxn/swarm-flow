@@ -35,6 +35,12 @@ export type NormalizedQaConfig = {
     directory: string;
     generatedDirectory: string;
   };
+  artifacts: {
+    directories: string[];
+  };
+  accessibility: {
+    command?: string;
+  };
   ai: NormalizedAiProviderConfig;
 };
 
@@ -74,6 +80,8 @@ export type QaActionInputs = {
   screenshot?: NormalizedQaConfig["browser"]["screenshot"];
   trace?: NormalizedQaConfig["browser"]["trace"];
   video?: NormalizedQaConfig["browser"]["video"];
+  accessibilityCommand?: string;
+  artifactDirectories?: string | string[];
   usernameEnv?: string;
   passwordEnv?: string;
   totpSecretEnv?: string;
@@ -109,6 +117,10 @@ const defaults: NormalizedQaConfig = {
     directory: "tests",
     generatedDirectory: "tests/swarm-flow"
   },
+  artifacts: {
+    directories: ["test-results", "playwright-report", ".runs/<run-id>/artifacts"]
+  },
+  accessibility: {},
   ai: {
     provider: "openai",
     model: "gpt-5.4-mini"
@@ -279,6 +291,9 @@ function applyActionLikeInputs(config: NormalizedQaConfig, inputs?: QaActionInpu
   config.browser.screenshot = inputs.screenshot ?? config.browser.screenshot;
   config.browser.trace = inputs.trace ?? config.browser.trace;
   config.browser.video = inputs.video ?? config.browser.video;
+  config.accessibility.command = inputs.accessibilityCommand ?? config.accessibility.command;
+  config.artifacts.directories =
+    normalizeArtifactDirectories(inputs.artifactDirectories) ?? config.artifacts.directories;
 }
 
 function applyBedrockInputs(config: NormalizedQaConfig, inputs: QaActionInputs): void {
@@ -396,4 +411,13 @@ function toNumber(value: number | string | undefined, fallback: number): number 
     return Number(value);
   }
   return fallback;
+}
+
+function normalizeArtifactDirectories(value: string | string[] | undefined): string[] | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  const items = Array.isArray(value) ? value : value.split(/[,\n]/g);
+  return items.map((item) => item.trim()).filter(Boolean);
 }

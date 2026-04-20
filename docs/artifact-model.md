@@ -31,6 +31,8 @@ Epic, review-only, and QA-only runs add artifacts that keep large AI-assisted de
 - `exploratory-qa-report.md`
 - `regression-risk-report.md`
 - `test-gap-report.md`
+- `browser-artifacts.json`
+- `accessibility-report.md`
 - `github-comments.preview.json`
 - `jira-comments.preview.json`
 - `slack-update.preview.md`

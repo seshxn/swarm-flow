@@ -25,10 +25,15 @@ The QA Action writes governed evidence into `.runs/<run-id>/artifacts/`. Parent 
 Required artifacts:
 
 - `qa-context.json`
+- `browser-artifacts.json`
 - `qa-report.md`
 - `test-gap-report.md`
 - `validation-status.md`
 - `github-comments.preview.json`
+
+When the action is configured with an accessibility command, it also writes:
+
+- `accessibility-report.md`
 
 Optional artifacts:
 
@@ -45,8 +50,9 @@ During `qa_swarm`, the parent run should:
 1. Read `slice_to_pr_map.json` from implementation planning.
 2. For each PR slice, check whether a matching QA Action artifact exists.
 3. Import or link `qa-context.json`, `qa-report.md`, `test-gap-report.md`, and `validation-status.md`.
-4. Mark missing deploy targets as blockers or assumptions.
-5. Register normalized QA artifacts in the parent run.
-6. Leave `github-comments.preview.json` in preview mode until `status_sync` records a selected posting decision.
+4. Import or link `browser-artifacts.json` and `accessibility-report.md` when present.
+5. Mark missing deploy targets as blockers or assumptions.
+6. Register normalized QA artifacts in the parent run.
+7. Leave `github-comments.preview.json` in preview mode until `status_sync` records a selected posting decision.
 
 The parent run should not infer success from a completed GitHub Action alone. It should read `validation-status.md` and apply policy gates before delivery.

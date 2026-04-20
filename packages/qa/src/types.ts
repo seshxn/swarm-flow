@@ -1,4 +1,5 @@
 import type { RunTarget } from "@swarm-flow/core";
+import type { NormalizedQaConfig } from "./config.js";
 
 export type QaBackendId = "playwright";
 export type QaMode = "suggest" | "execute" | "full";
@@ -9,7 +10,7 @@ export type QaExecutionRequest = {
   backend: QaBackendId;
   targetUrl?: string;
   mode: QaMode;
-  config?: unknown;
+  config?: NormalizedQaConfig;
   testCommand?: string;
   workingDirectory: string;
   outputDirectory: string;
@@ -27,6 +28,8 @@ export type QaExecutionResult = {
     qaReport: string;
     testGapReport: string;
     validationStatus: string;
+    browserArtifacts?: string;
+    accessibilityReport?: string;
     githubCommentsPreview?: string;
     playwrightResults?: string;
   };

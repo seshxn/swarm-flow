@@ -61,9 +61,11 @@ No comment is posted automatically. A later connector write must use the selecte
 The first-party QA Action writes run artifacts under `.runs/<run-id>/artifacts/` and uploads `.runs` as a GitHub Actions artifact. The expected QA artifact names are:
 
 - `qa-context.json`
+- `browser-artifacts.json`
 - `qa-report.md`
 - `test-gap-report.md`
 - `validation-status.md`
+- `accessibility-report.md` when an accessibility command is configured
 - `github-comments.preview.json`
 
 Parent `epic` runs may import or link these artifacts during `qa_swarm`, but they still apply swarm-flow policy before progressing to delivery.
