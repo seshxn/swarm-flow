@@ -6,12 +6,14 @@ import type {
   ConnectorWritePreview,
   ExternalPostingSelection,
   Flow,
+  HookExecution,
   RunLogEntry,
   RunScope,
   RunTarget,
   RunState
 } from "@swarm-flow/core";
 import { validateFlow } from "@swarm-flow/core";
+import { HookRunner } from "./hooks.js";
 
 export type StartFeatureRunInput = {
   flow: unknown;
@@ -25,6 +27,7 @@ export type StartFeatureRunInput = {
 export type RuntimeOptions = {
   repoRoot: string;
   store?: FileRunStore;
+  artifactEvaluator?: (artifactId: string, content: string, expectation: string) => Promise<{ ok: boolean; reason?: string }>;
 };
 
 export type RegisterArtifactInput = {
@@ -117,9 +120,11 @@ export class FileRunStore {
 
 export class FlowRuntime {
   private readonly store: FileRunStore;
+  private readonly hooks: HookRunner;
 
   constructor(private readonly options: RuntimeOptions) {
     this.store = options.store ?? new FileRunStore(options.repoRoot);
+    this.hooks = new HookRunner({ repoRoot: options.repoRoot, store: this.store });
   }
 
   async startFeatureRun(input: StartFeatureRunInput): Promise<RunState> {
@@ -186,11 +191,30 @@ export class FlowRuntime {
     await this.store.save(run);
     await this.store.writeArtifact(run.id, initialArtifactPath, initialArtifact);
 
-    return run;
+    // execute before hooks for the first phase
+    if (firstPhase.hooks?.before) {
+      assertHooksPassed(await this.hooks.executeHooks(run.id, "before_phase", firstPhase.hooks.before, firstPhase.id));
+    }
+    
+    return await this.store.load(run.id);
   }
 
   async registerArtifact(runId: string, input: RegisterArtifactInput): Promise<RunState> {
     const run = await this.store.load(runId);
+
+    const currentPhase = run.flow_snapshot.phases.find((p) => p.id === input.phaseId);
+    if (!currentPhase) {
+      throw new Error(`Phase ${input.phaseId} not found in flow`);
+    }
+
+    if (this.options.artifactEvaluator && currentPhase.output_expectations?.[input.id]) {
+      const expectation = currentPhase.output_expectations[input.id];
+      const evalResult = await this.options.artifactEvaluator(input.id, input.content, expectation);
+      if (!evalResult.ok) {
+         throw new Error(`Semantic expectation failed for artifact ${input.id}: ${evalResult.reason}`);
+      }
+    }
+
     const now = input.now ?? new Date();
     const timestamp = now.toISOString();
     const relativePath = `artifacts/${input.fileName}`;
@@ -337,15 +361,26 @@ export class FlowRuntime {
       return candidate.dependencies.every((dependency) => completed.includes(dependency));
     });
 
+    // execute after hooks before committing the phase transition so failed gates keep the run in place
+    if (phase.hooks?.after) {
+      assertHooksPassed(await this.hooks.executeHooks(run.id, "after_phase", phase.hooks.after, phase.id));
+    }
+
+    // execute entry hooks before moving into the next phase
+    if (nextPhase?.hooks?.before) {
+      assertHooksPassed(await this.hooks.executeHooks(run.id, "before_phase", nextPhase.hooks.before, nextPhase.id));
+    }
+
+    const runWithHookResults = await this.store.load(runId);
     const updated: RunState = {
-      ...run,
+      ...runWithHookResults,
       completed_phases: completed,
       current_phase: nextPhase?.id ?? phase.id,
       pending_phases: run.flow_snapshot.phases
         .filter((candidate) => !completed.includes(candidate.id) && candidate.id !== nextPhase?.id)
         .map((candidate) => candidate.id),
       logs: [
-        ...run.logs,
+        ...runWithHookResults.logs,
         logEntry(new Date().toISOString(), "info", "Phase completed", {
           phase_id: phase.id,
           next_phase_id: nextPhase?.id
@@ -356,6 +391,14 @@ export class FlowRuntime {
 
     await this.store.save(updated);
     return updated;
+  }
+}
+
+function assertHooksPassed(results: HookExecution[]): void {
+  const failed = results.find((result) => result.status === "failed");
+  if (failed) {
+    const suffix = failed.error ? `: ${failed.error}` : "";
+    throw new Error(`hook ${failed.id} failed${suffix}`);
   }
 }
 

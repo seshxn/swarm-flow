@@ -17,6 +17,7 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@swarm-flow/adapters": "0.1.0",
     "@swarm-flow/core": "0.1.0",
     "@swarm-flow/qa": "0.1.0",
     "@swarm-flow/runtime": "0.1.0",

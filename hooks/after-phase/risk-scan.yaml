@@ -1,0 +1,10 @@
+id: risk_scan
+trigger: after_phase
+description: Record risk scan intent after discovery.
+conditions:
+  - artifact_exists:discovery_report
+actions:
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

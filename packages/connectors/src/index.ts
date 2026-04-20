@@ -1,3 +1,5 @@
+import { isAbsolute, relative, resolve } from "node:path";
+
 export type ConnectorReadRequest = {
   id: string;
 };
@@ -71,19 +73,74 @@ export function previewOnlyWriteResult(
 }
 
 export function createFilesystemConnector(repoRoot: string): Connector {
-  return createPreviewConnector({
+  return {
     id: "filesystem",
-    readableName: "Local filesystem",
-    repoRoot
-  });
+    async read(request) {
+      const fs = await import("node:fs/promises");
+      try {
+        const content = await fs.readFile(resolveWithinRepo(repoRoot, request.id), "utf8");
+        return { content };
+      } catch {
+        return { content: "" };
+      }
+    },
+    async search(request) {
+      return [{ connector: "filesystem", query: request.query, mode: "preview" }];
+    },
+    async create(request) {
+      enforcePreview("filesystem", request.preview);
+      return previewOnlyWriteResult("filesystem", "create", request.idempotencyKey);
+    },
+    async update(request) {
+      enforcePreview("filesystem", request.preview);
+      return previewOnlyWriteResult("filesystem", "update", request.idempotencyKey);
+    },
+    async previewWrite(request) {
+      return previewOnlyWriteResult("filesystem", "update", request.idempotencyKey);
+    },
+    async validatePermissions() {
+      return { ok: true, reasons: [] };
+    }
+  };
 }
 
 export function createGitConnector(repoRoot: string): Connector {
-  return createPreviewConnector({
+  const runGit = async (args: string[]) => {
+    const { execFile } = await import("node:child_process");
+    const util = await import("node:util");
+    const execFileAsync = util.promisify(execFile);
+    const { stdout } = await execFileAsync("git", args, { cwd: repoRoot });
+    return String(stdout).trim();
+  };
+
+  return {
     id: "git",
-    readableName: "Git",
-    repoRoot
-  });
+    async read(request) {
+      try {
+        const content = await runGit(["show", request.id]);
+        return { content };
+      } catch {
+        return { content: "" };
+      }
+    },
+    async search(request) {
+      return [{ connector: "git", query: request.query, mode: "preview" }];
+    },
+    async create(request) {
+      enforcePreview("git", request.preview);
+      return previewOnlyWriteResult("git", "create", request.idempotencyKey);
+    },
+    async update(request) {
+      enforcePreview("git", request.preview);
+      return previewOnlyWriteResult("git", "update", request.idempotencyKey);
+    },
+    async previewWrite(request) {
+      return previewOnlyWriteResult("git", "update", request.idempotencyKey);
+    },
+    async validatePermissions() {
+      return { ok: true, reasons: [] };
+    }
+  };
 }
 
 export function createGitHubConnector(): Connector {
@@ -180,4 +237,18 @@ function enforcePreview(connector: string, preview: boolean): void {
   if (!preview) {
     throw new Error(`${connector} connector only supports preview writes in v0.1`);
   }
+}
+
+function resolveWithinRepo(repoRoot: string, requestedPath: string): string {
+  if (requestedPath.includes("\0")) {
+    throw new Error("filesystem path contains a null byte");
+  }
+
+  const root = resolve(repoRoot);
+  const target = resolve(root, requestedPath);
+  const relativePath = relative(root, target);
+  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    throw new Error("filesystem path escapes repository root");
+  }
+  return target;
 }

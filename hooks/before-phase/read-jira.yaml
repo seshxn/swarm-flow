@@ -1,0 +1,10 @@
+id: read_jira
+trigger: before_phase
+description: Read Jira context when available.
+conditions: []
+actions:
+  - connector:jira.search
+  - log:event
+safety:
+  external_writes: false
+  retry_safe: true

@@ -1,16 +1,23 @@
 export type AgentAdapterRequest = {
+  runId: string;
+  repoRoot: string;
   agentId: string;
   phaseId: string;
-  artifacts: Record<string, string>;
+  goal: string;
+  requiredOutputs: string[];
+  contextFiles: Record<string, string>;
 };
 
 export type AgentAdapterResult = {
-  agentId: string;
-  phaseId: string;
-  outputs: Record<string, string>;
-  evidence: string[];
+  ok: boolean;
+  artifacts_created: Record<string, string>;
+  reasons: string[];
 };
 
 export type AgentAdapter = {
+  id: string;
   invoke(request: AgentAdapterRequest): Promise<AgentAdapterResult>;
 };
+
+export * from "./evaluator.js";
+export * from "./standard.js";
