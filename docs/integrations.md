@@ -32,6 +32,25 @@ This creates `AGENTS.md` for Codex and `CLAUDE.md` for Claude Code. Those files 
 swarm-flow start "<user request>"
 ```
 
+## Subagent Dispatch Planning
+
+When a run reaches a phase that should fan out to specialist agents, use:
+
+```bash
+swarm-flow agents plan
+swarm-flow agents plan --phase planning
+swarm-flow agents plan --output .runs/run-123/context/subagent-dispatch.json
+```
+
+The command writes a host-neutral `subagent-dispatch.json` manifest and a matching context pack. The manifest is designed for external hosts, not for the CLI itself:
+
+- `runId` and `phaseId` identify the active or selected phase.
+- `taskPackets[]` contains one packet per specialist role card under `agents/`.
+- Each packet includes the role card path, owned files or scope, required outputs, recommended worktree name, context pack path, and handoff instructions.
+- The recommended worktree path follows `.worktrees/<run-id>-<phase>-<agent>`.
+
+Codex or Claude can consume that manifest outside the CLI by reading the JSON, creating their own host-native subagents, and handing them the packet contents. `swarm-flow` does not launch host-specific agents itself.
+
 ## Claude Code
 
 Public plugin metadata:

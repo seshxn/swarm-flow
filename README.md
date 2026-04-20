@@ -99,6 +99,7 @@ node packages/cli/dist/index.js status
 node packages/cli/dist/index.js resume
 node packages/cli/dist/index.js phase
 node packages/cli/dist/index.js context pack
+node packages/cli/dist/index.js agents plan
 node packages/cli/dist/index.js artifact add feature_brief path/to/feature-brief.md
 node packages/cli/dist/index.js policy check
 node packages/cli/dist/index.js complete intake
@@ -113,6 +114,16 @@ swarm-flow includes local integration bundles for Claude Code and Codex:
 
 - [plugins/claude-code](plugins/claude-code): Claude Code slash-command prompts such as `/swarm`, `/swarm-resume`, and `/swarm-preview`.
 - [plugins/codex](plugins/codex): Codex plugin manifest plus a `swarm-flow` skill designed to trigger from normal delivery requests.
+
+The CLI can also plan host-neutral subagent dispatch manifests:
+
+```bash
+swarm-flow agents plan
+swarm-flow agents plan --phase planning
+swarm-flow agents plan --output .runs/run-123/context/subagent-dispatch.json
+```
+
+Each manifest includes the run, phase, role-card path, recommended worktree name, owned files or scope, required outputs, context pack path, and handoff instructions. Claude Code and Codex can read that JSON and spawn their own native subagents outside the CLI; `swarm-flow` only writes the manifest and context pack.
 
 Inspect them from the CLI:
 
