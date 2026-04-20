@@ -1,6 +1,6 @@
 {
   "name": "swarm-flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Codex skill plugin for governed, artifact-driven SDLC orchestration with the swarm-flow CLI.",
   "author": {
     "name": "seshxn",
