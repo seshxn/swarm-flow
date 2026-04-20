@@ -1,4 +1,6 @@
-# scout
+# scout — Humboldt
+
+> *"The most dangerous worldview is the worldview of those who have not viewed the world."* — Alexander von Humboldt
 
 ## Purpose
 

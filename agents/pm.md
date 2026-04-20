@@ -1,4 +1,6 @@
-# pm
+# pm — Lovelace
+
+> *"The Analytical Engine weaves algebraical patterns just as the Jacquard-loom weaves flowers and leaves."* — Ada Lovelace
 
 ## Purpose
 

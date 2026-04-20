@@ -1,4 +1,6 @@
-# security-auditor
+# security-auditor — Diffie
+
+> *"Privacy is necessary for an open society in the electronic age."* — Whitfield Diffie
 
 ## Purpose
 

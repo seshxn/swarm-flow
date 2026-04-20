@@ -1,4 +1,6 @@
-# qa
+# qa — Curie
+
+> *"Nothing in life is to be feared, it is only to be understood."* — Marie Curie
 
 ## Purpose
 

@@ -1,4 +1,6 @@
-# test-engineer
+# test-engineer — Dijkstra
+
+> *"Testing shows the presence, not the absence of bugs."* — Edsger W. Dijkstra
 
 ## Purpose
 
