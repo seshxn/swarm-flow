@@ -56,6 +56,16 @@ swarm-flow artifacts
 
 Continue from `current_phase` and use the flow's `required_outputs` as the checklist.
 
+## Phase Skills
+
+Use the narrower swarm-flow skills when the task matches a phase:
+
+- `swarm-flow-phase`: inspect phase requirements, register artifacts, check policy, and complete phases.
+- `swarm-flow-implementation`: make scoped code changes with test evidence.
+- `swarm-flow-validation`: produce review, QA, test-gap, and validation-status artifacts.
+- `swarm-flow-preview-writes`: create safe connector and external comment previews.
+- `swarm-flow-repair-loop`: document validation failures, root cause, and repair evidence.
+
 ## Working Rules
 
 1. A phase advances because required artifacts are registered and meaningful, not because Codex says it is done.
@@ -73,6 +83,11 @@ swarm-flow flows list
 swarm-flow flows inspect feature-default
 swarm-flow skills list
 swarm-flow skills inspect planning/task-breakdown
+swarm-flow phase
+swarm-flow context pack
+swarm-flow artifact add <artifact_id> <file>
+swarm-flow policy check
+swarm-flow complete <phase>
 swarm-flow runs list
 swarm-flow run show <run-id>
 swarm-flow approve <phase> --by human

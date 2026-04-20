@@ -23,6 +23,8 @@ For native skill discovery:
 ./scripts/install-codex-skill.sh
 ```
 
+The script installs into `${CODEX_SKILLS_DIR}` when set, otherwise `~/.agents/skills`, which is the current Codex desktop skill discovery path.
+
 Or from a public clone:
 
 ```bash
@@ -37,6 +39,7 @@ npm link
 ## What It Adds
 
 - A `swarm-flow` skill for start/resume/status/approval/preview workflows.
+- Narrower phase skills for phase operation, implementation, validation, preview writes, and repair loops.
 - Strict guidance that artifacts, not chat claims, advance runs.
 - Explicit prohibition on live external writes.
 - Plain-language run starts with `swarm-flow start "<request>"`.

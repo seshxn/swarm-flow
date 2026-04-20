@@ -94,6 +94,7 @@ Local marketplace entry:
 ```
 
 The Codex plugin contributes a `swarm-flow` skill. Its trigger text is intentionally broad enough for normal requests like "build this feature", "fix this bug", "refactor this module", or "research this spike" when swarm-flow is installed.
+It also contributes narrower skills for phase operation, implementation, validation, preview writes, and repair loops so Codex can load only the workflow guidance needed for the current phase.
 
 Install the skill from a clone:
 
@@ -106,6 +107,8 @@ npm link
 ./scripts/install-codex-skill.sh
 ```
 
+The installer writes to `${CODEX_SKILLS_DIR}` when that environment variable is set. Otherwise it installs the skill symlink under `~/.agents/skills`, which is the Codex desktop skill discovery path used by this plugin.
+
 Restart Codex afterward.
 
 Once installed, a request like this is enough:
@@ -115,6 +118,7 @@ Allow admins to bulk reassign cases by region, with audit history and role check
 ```
 
 Codex should check `swarm-flow status`, resume an active run if present, or start a new run with `swarm-flow start "<request>"`.
+During a run, Codex should use `swarm-flow phase`, `swarm-flow context pack`, `swarm-flow artifact add`, `swarm-flow policy check`, and `swarm-flow complete` to keep progress tied to registered artifacts and policy gates.
 
 ## Distribution
 

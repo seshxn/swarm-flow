@@ -12,7 +12,7 @@ import {
   type NormalizeQaConfigInput,
   type QaBackendId
 } from "@swarm-flow/qa";
-import { validateFlow, type RunScope, type RunState, type RunTarget } from "@swarm-flow/core";
+import { evaluatePhaseEntry, validateFlow, type Policy, type RunScope, type RunState, type RunTarget } from "@swarm-flow/core";
 import { StandardAgentAdapter } from "@swarm-flow/adapters";
 
 export type CliIo = {
@@ -46,6 +46,28 @@ type CommentRunOptions = {
 
 type CommentSelectOptions = CommentRunOptions & {
   ids: string;
+};
+
+type ArtifactAddOptions = {
+  run?: string;
+  phase?: string;
+  mediaType?: string;
+};
+
+type CompleteOptions = {
+  run?: string;
+  outputs?: string;
+  policy?: string;
+};
+
+type PolicyCheckOptions = {
+  run?: string;
+  policy?: string;
+};
+
+type ContextPackOptions = {
+  run?: string;
+  output?: string;
 };
 
 type QaOptions = {
@@ -214,6 +236,7 @@ export function createProgram(io: CliIo = {}): Command {
       stdout(`Executing headless agent loop for phase: ${phaseId}...`);
       
       const adapter = new StandardAgentAdapter();
+      const contextPack = await renderContextPack(run);
       const result = await adapter.invoke({
         runId: run.id,
         repoRoot: cwd,
@@ -221,7 +244,9 @@ export function createProgram(io: CliIo = {}): Command {
         phaseId,
         goal: run.feature.goal,
         requiredOutputs: phase.required_outputs,
-        contextFiles: {} // Future improvement: Read previous phase artifacts or git diff
+        contextFiles: {
+          "current-phase-context.md": contextPack
+        }
       });
 
       if (!result.ok) {
@@ -416,6 +441,111 @@ export function createProgram(io: CliIo = {}): Command {
       }
     });
 
+  const artifact = program.command("artifact").description("Register and inspect run artifacts.");
+  artifact
+    .command("add")
+    .argument("<id>", "artifact id from the current phase required outputs")
+    .argument("<file>", "local file to register as the artifact content")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--phase <phase>", "phase id; defaults to the run current phase")
+    .option("--media-type <type>", "artifact media type; inferred from file extension when omitted")
+    .description("Copy a local file into the active run and register it as an artifact.")
+    .action(async (id: string, file: string, options: ArtifactAddOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const absoluteFile = resolve(cwd, file);
+      const content = await readFile(absoluteFile, "utf8");
+      const phaseId = options.phase ?? run.current_phase;
+      const fileName = basename(file);
+      const mediaType = options.mediaType ?? inferMediaType(fileName);
+      const updated = await new FlowRuntime({ repoRoot: cwd, store }).registerArtifact(run.id, {
+        id,
+        fileName,
+        phaseId,
+        mediaType,
+        content
+      });
+      stdout(`Registered artifact ${id}: ${updated.artifact_registry[id].path}`);
+    });
+
+  program
+    .command("phase")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Show the current phase contract.")
+    .action(async (options: { run?: string }) => {
+      const run = await loadRun(new FileRunStore(cwd), options.run);
+      const phase = currentPhase(run);
+      stdout(`Current phase: ${phase.id}`);
+      stdout(`Description: ${phase.description}`);
+      stdout(`Agents: ${phase.agents.join(", ")}`);
+      stdout(`Required outputs: ${phase.required_outputs.join(", ") || "none"}`);
+      stdout(`Approval required: ${phase.approval_required ? "yes" : "no"}`);
+      for (const condition of phase.transition_conditions) {
+        stdout(`Condition: ${condition}`);
+      }
+    });
+
+  program
+    .command("complete")
+    .argument("<phase>", "current phase id to complete")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--outputs <ids>", "comma-separated output artifact ids; defaults to current phase required outputs")
+    .option("--policy <id>", "policy id or path; defaults to configured policy when available")
+    .description("Complete the current phase after artifact and policy gates pass.")
+    .action(async (phaseId: string, options: CompleteOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const phase = currentPhase(run);
+      if (phase.id !== phaseId) {
+        throw new Error(`cannot complete phase ${phaseId}; current phase is ${phase.id}`);
+      }
+      const outputIds = options.outputs
+        ? options.outputs.split(",").map((id) => id.trim()).filter(Boolean)
+        : phase.required_outputs;
+      const nextPhase = nextRunnablePhase(run, phase.id);
+      if (nextPhase) {
+        const decision = await evaluatePhaseGate(cwd, run, nextPhase.id, options.policy);
+        if (!decision.allowed) {
+          throw new Error(`cannot enter ${nextPhase.id}: ${decision.reasons.join("; ")}`);
+        }
+      }
+      const updated = await new FlowRuntime({ repoRoot: cwd, store }).completePhase(run.id, phaseId, outputIds);
+      stdout(`Completed ${phaseId}; current phase: ${updated.current_phase}`);
+    });
+
+  const policyCommand = program.command("policy").description("Evaluate run policy gates.");
+  policyCommand
+    .command("check")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--policy <id>", "policy id or path; defaults to configured policy when available")
+    .description("Evaluate policy for the current phase.")
+    .action(async (options: PolicyCheckOptions) => {
+      const run = await loadRun(new FileRunStore(cwd), options.run);
+      const decision = await evaluatePhaseGate(cwd, run, run.current_phase, options.policy);
+      if (!decision.allowed) {
+        throw new Error(`Policy check failed for ${run.current_phase}: ${decision.reasons.join("; ")}`);
+      }
+      stdout(`Policy check passed for ${run.current_phase}`);
+    });
+
+  const contextCommand = program.command("context").description("Create compact agent context packs.");
+  contextCommand
+    .command("pack")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--output <path>", "output path; defaults to the run context directory")
+    .description("Write a current-phase context pack for agents.")
+    .action(async (options: ContextPackOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const content = await renderContextPack(run);
+      const outputPath = options.output
+        ? resolve(cwd, options.output)
+        : resolve(cwd, ".runs", run.id, "context", "current-phase-context.md");
+      await mkdir(dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, content, "utf8");
+      stdout(`Context pack written: ${outputPath}`);
+    });
+
   const flows = program.command("flows").description("Inspect bundled flows.");
   flows.command("list").description("List bundled flow definitions.").action(async () => {
     for (const file of await listMarkdownOrYaml(resolve(repoRootFromDist, "flows"), ".yaml")) {
@@ -469,6 +599,13 @@ export function createProgram(io: CliIo = {}): Command {
       const content = await readFile(resolve(repoRootFromDist, "skills", `${id}.md`), "utf8");
       stdout(content);
     });
+  skills.command("lint").description("Validate bundled skill cards for required workflow sections.").action(async () => {
+    const failures = await lintSkillCards(resolve(repoRootFromDist, "skills"));
+    if (failures.length > 0) {
+      throw new Error(`Skill lint failed:\n${failures.join("\n")}`);
+    }
+    stdout("Skill lint passed");
+  });
 
   const integrations = program.command("integrations").description("Inspect agent integration bundles.");
   integrations.command("list").description("List bundled agent integrations.").action(() => {
@@ -727,6 +864,195 @@ function validateApplyPreview(run: RunState, connector: string, previewPayload: 
   }
 
   return reasons;
+}
+
+async function loadRun(store: FileRunStore, runId?: string): Promise<RunState> {
+  const run = runId ? await store.load(runId) : await store.latest();
+  if (!run) {
+    throw new Error("No runs found.");
+  }
+  return run;
+}
+
+function currentPhase(run: RunState): RunState["flow_snapshot"]["phases"][number] {
+  const phase = run.flow_snapshot.phases.find((candidate) => candidate.id === run.current_phase);
+  if (!phase) {
+    throw new Error(`Current phase ${run.current_phase} not found in flow ${run.flow_id}`);
+  }
+  return phase;
+}
+
+function nextRunnablePhase(run: RunState, completedPhaseId: string): RunState["flow_snapshot"]["phases"][number] | undefined {
+  const completed = new Set([...run.completed_phases, completedPhaseId]);
+  return run.flow_snapshot.phases.find((candidate) => {
+    if (completed.has(candidate.id)) {
+      return false;
+    }
+    return candidate.dependencies.every((dependency) => completed.has(dependency));
+  });
+}
+
+async function evaluatePhaseGate(cwd: string, run: RunState, phaseId: string, policyIdOrPath?: string) {
+  const policy = await loadPolicy(cwd, policyIdOrPath);
+  const decision = evaluatePhaseEntry({
+    policy,
+    phaseId,
+    artifacts: new Set(Object.keys(run.artifact_registry)),
+    approvals: new Set(Object.keys(run.approvals)),
+    validationStatus: await readValidationStatus(cwd, run)
+  });
+  const phase = run.flow_snapshot.phases.find((candidate) => candidate.id === phaseId);
+  if (phase?.approval_required && !run.approvals[phaseId]) {
+    return {
+      allowed: false,
+      reasons: [...decision.reasons, `${phaseId} requires approval`]
+    };
+  }
+  return decision;
+}
+
+async function loadPolicy(cwd: string, policyIdOrPath?: string): Promise<Policy> {
+  const policyName = policyIdOrPath ?? (await configuredPolicy(cwd)) ?? "local-dev";
+  const policyPath =
+    policyName.endsWith(".yaml") || policyName.includes("/")
+      ? resolve(cwd, policyName)
+      : resolve(repoRootFromDist, "policies", `${policyName}.yaml`);
+  const raw = await readFile(policyPath, "utf8");
+  return parse(raw) as Policy;
+}
+
+async function configuredPolicy(cwd: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(resolve(cwd, "swarm-flow.config.json"), "utf8");
+    const config = JSON.parse(raw) as { defaultPolicy?: unknown };
+    return typeof config.defaultPolicy === "string" ? config.defaultPolicy : undefined;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+async function readValidationStatus(cwd: string, run: RunState): Promise<"passed" | "failed" | "unknown"> {
+  const entry = run.artifact_registry.validation_status;
+  if (!entry) {
+    return "unknown";
+  }
+  const content = await readFile(resolve(cwd, ".runs", run.id, entry.path), "utf8");
+  if (/\bfailed\b/i.test(content)) {
+    return "failed";
+  }
+  if (/\bpassed\b/i.test(content)) {
+    return "passed";
+  }
+  return "unknown";
+}
+
+function inferMediaType(fileName: string): "text/markdown" | "application/json" | string {
+  return fileName.endsWith(".json") ? "application/json" : "text/markdown";
+}
+
+async function renderContextPack(run: RunState): Promise<string> {
+  const phase = currentPhase(run);
+  const skillMatches = await skillsForPhase(phase.id);
+  const artifacts = Object.values(run.artifact_registry)
+    .map((artifact) => `- \`${artifact.id}\` -> \`${artifact.path}\` (${artifact.produced_by_phase})`)
+    .join("\n");
+  const requiredOutputs = phase.required_outputs.map((output) => `- \`${output}\``).join("\n") || "- none";
+  const conditions = phase.transition_conditions.map((condition) => `- ${condition}`).join("\n") || "- none";
+  const skills = skillMatches.map((skill) => `- \`${skill.id}\` - ${skill.title}`).join("\n") || "- no direct phase skill found";
+
+  return [
+    "# swarm-flow Context Pack",
+    "",
+    `Run: \`${run.id}\``,
+    `Flow: \`${run.flow_id}\``,
+    `Goal: ${run.feature.goal}`,
+    `Current phase: \`${phase.id}\``,
+    "",
+    "## Required outputs",
+    "",
+    requiredOutputs,
+    "",
+    "## Transition conditions",
+    "",
+    conditions,
+    "",
+    "## Matching skills",
+    "",
+    skills,
+    "",
+    "## Registered artifacts",
+    "",
+    artifacts || "- none",
+    "",
+    "## Open assumptions and risks",
+    "",
+    `Assumptions: ${run.unresolved_assumptions.length ? run.unresolved_assumptions.join("; ") : "none"}`,
+    `Risks: ${run.unresolved_risks.length ? run.unresolved_risks.join("; ") : "none"}`,
+    "",
+    "## Safety reminders",
+    "",
+    "- Treat `run.json` and registered artifacts as source of truth.",
+    "- Keep external writes in preview mode until a user explicitly selects and approves them.",
+    "- Do not advance the phase until required artifacts are registered and policy gates pass.",
+    ""
+  ].join("\n");
+}
+
+async function skillsForPhase(phaseId: string): Promise<Array<{ id: string; title: string }>> {
+  const files = await listNestedFiles(resolve(repoRootFromDist, "skills"), ".md");
+  const matches: Array<{ id: string; title: string }> = [];
+  for (const file of files) {
+    const content = await readFile(resolve(repoRootFromDist, "skills", file), "utf8");
+    const metadata = parseFrontmatter(content);
+    if (metadata.phase === phaseId || file.startsWith(`${phaseId}/`)) {
+      matches.push({
+        id: String(metadata.id ?? file.replace(/\.md$/, "")),
+        title: String(metadata.title ?? file.replace(/\.md$/, ""))
+      });
+    }
+  }
+  return matches.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+async function lintSkillCards(skillsRoot: string): Promise<string[]> {
+  const failures: string[] = [];
+  for (const file of await listNestedFiles(skillsRoot, ".md")) {
+    const content = await readFile(resolve(skillsRoot, file), "utf8");
+    const metadata = parseFrontmatter(content);
+    for (const field of ["id", "title", "phase", "inputs", "outputs"]) {
+      if (!(field in metadata)) {
+        failures.push(`${file}: missing frontmatter field ${field}`);
+      }
+    }
+    const requiredSections = [
+      ["Purpose", /# Purpose\b/i],
+      ["When to use", /# When to use\b/i],
+      ["When NOT to use", /# When NOT to use\b/i],
+      ["Prerequisites", /# Prerequisites\b/i],
+      ["Exact steps or Process", /# (Exact steps|Process)\b/i],
+      ["Anti-rationalization checks", /# Anti-rationalization checks\b/i],
+      ["Verification", /# Verification\b/i],
+      ["Exit criteria", /# Exit criteria\b/i],
+      ["Failure and escalation guidance", /# Failure and escalation guidance\b/i]
+    ] as const;
+    for (const [label, pattern] of requiredSections) {
+      if (!pattern.test(content)) {
+        failures.push(`${file}: missing section ${label}`);
+      }
+    }
+  }
+  return failures;
+}
+
+function parseFrontmatter(content: string): Record<string, unknown> {
+  const match = content.match(/^---\n([\s\S]*?)\n---/);
+  if (!match) {
+    return {};
+  }
+  return parse(match[1] ?? "") as Record<string, unknown>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

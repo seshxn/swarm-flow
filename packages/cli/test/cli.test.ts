@@ -104,6 +104,91 @@ describe("CLI", () => {
     expect(output.join("\n")).toContain("plugins/codex");
   });
 
+  it("registers artifacts, blocks unapproved phase completion, then advances after approval", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const flowPath = join(workspace, "flow.yaml");
+    const artifactPath = join(workspace, "feature-brief.md");
+    await writeFile(
+      flowPath,
+      [
+        "id: feature-default",
+        "name: Feature Delivery",
+        "phases:",
+        "  - id: intake",
+        "    description: Normalize",
+        "    agents: [pm]",
+        "    required_outputs: [feature_brief]",
+        "  - id: planning",
+        "    description: Plan",
+        "    agents: [pm]",
+        "    required_outputs: [acceptance_criteria]",
+        "    dependencies: [intake]",
+        "    approval_required: true"
+      ].join("\n"),
+      "utf8"
+    );
+    await writeFile(artifactPath, "# Feature Brief\n\nEvidence-backed intake.\n", "utf8");
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "start",
+      "feature",
+      "--title",
+      "Bulk case reassignment",
+      "--goal",
+      "Reassign cases by region",
+      "--flow",
+      flowPath
+    ]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "artifact", "add", "feature_brief", "feature-brief.md"]);
+
+    await expect(program.parseAsync(["node", "swarm-flow", "complete", "intake"])).rejects.toThrow(
+      "planning requires approval"
+    );
+
+    await program.parseAsync(["node", "swarm-flow", "approve", "planning"]);
+    await program.parseAsync(["node", "swarm-flow", "complete", "intake"]);
+
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.completed_phases).toEqual(["intake"]);
+    expect(runState.current_phase).toBe("planning");
+    expect(runState.artifact_registry.feature_brief.path).toBe("artifacts/feature-brief.md");
+    expect(output.join("\n")).toContain("Registered artifact feature_brief");
+    expect(output.join("\n")).toContain("Completed intake; current phase: planning");
+  });
+
+  it("checks policy, packs current phase context, and lints bundled skills", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Plan a governed launch checklist"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "policy", "check"]);
+    await program.parseAsync(["node", "swarm-flow", "context", "pack"]);
+    await program.parseAsync(["node", "swarm-flow", "skills", "lint"]);
+
+    const context = await readFile(join(workspace, ".runs", runId, "context", "current-phase-context.md"), "utf8");
+    expect(context).toContain("# swarm-flow Context Pack");
+    expect(context).toContain("Current phase: `intake`");
+    expect(context).toContain("Required outputs");
+    expect(output.join("\n")).toContain("Policy check passed for intake");
+    expect(output.join("\n")).toContain("Context pack written:");
+    expect(output.join("\n")).toContain("Skill lint passed");
+  });
+
   it("lists runs and shows run details", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const flowPath = join(workspace, "flow.yaml");

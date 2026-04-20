@@ -21,8 +21,8 @@ This audit records the second-phase hardening pass that moved swarm-flow from an
 ## Known v0.1 Limits
 
 - Jira, Confluence, GitHub, and CI connectors are preview-safe starter implementations, not live API clients.
-- The runtime persists state locally and does not yet execute full agent or hook pipelines.
-- Policies are implemented as core evaluators and YAML packs, but not yet loaded automatically for every CLI transition.
+- The runtime persists state locally. The headless `auto` command now receives a current-phase context pack, but full autonomous agent execution is still early.
+- Policies are implemented as core evaluators and YAML packs. Agent-facing CLI transitions now evaluate configured policy gates, but richer policy reporting is still future work.
 - Implementation work is prepared through artifacts and examples; swarm-flow is not yet an autonomous coding engine.
 
 These limits are intentional. The project should earn trust through inspectable local orchestration before expanding into live external writes or long-running autonomous execution.

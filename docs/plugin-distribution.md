@@ -20,6 +20,16 @@ swarm-flow start "<user request>"
 
 or `swarm-flow resume` when an active run already exists.
 
+Once a run exists, the integration should use the agent-facing control commands instead of chat memory:
+
+```bash
+swarm-flow phase
+swarm-flow context pack
+swarm-flow artifact add <artifact_id> <file>
+swarm-flow policy check
+swarm-flow complete <phase>
+```
+
 ## Publishing Checklist
 
 Before telling others to install:
@@ -101,6 +111,7 @@ The distributed plugins do not:
 They do:
 
 - expose commands/skills for start, resume, status, approval, and preview workflows
+- expose phase skills for implementation, validation, preview writes, and repair loops
 - support natural-language starts through `swarm-flow start "<request>"`
 - keep `.runs/<run-id>/run.json` as the source of truth
 - reinforce artifact-first delivery

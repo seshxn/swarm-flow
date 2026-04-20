@@ -2,7 +2,7 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-target_dir="${HOME}/.agents/skills"
+target_dir="${CODEX_SKILLS_DIR:-${HOME}/.agents/skills}"
 target="${target_dir}/swarm-flow"
 
 mkdir -p "${target_dir}"
