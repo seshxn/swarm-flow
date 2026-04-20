@@ -20,4 +20,5 @@ export type AgentAdapter = {
 };
 
 export * from "./evaluator.js";
+export * from "./subagent-dispatch.js";
 export * from "./standard.js";
