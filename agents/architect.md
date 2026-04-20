@@ -1,4 +1,6 @@
-# architect
+# architect — Ramanujan
+
+> *"An equation for me has no meaning unless it represents a thought of God."* — Srinivasa Ramanujan
 
 ## Purpose
 

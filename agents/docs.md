@@ -1,4 +1,6 @@
-# docs
+# docs — Sagan
+
+> *"The beauty of a living thing is not the atoms that go into it, but the way those atoms are put together."* — Carl Sagan
 
 ## Purpose
 
