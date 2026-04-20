@@ -1,6 +1,6 @@
 {
   "name": "swarm-flow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI-native software delivery engine for governed, artifact-driven SDLC flows.",
   "type": "module",
   "packageManager": "npm@10.9.3",
