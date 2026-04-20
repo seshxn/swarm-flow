@@ -30,6 +30,8 @@ jobs:
           aws-role-to-assume: ${{ secrets.AWS_BEDROCK_ROLE_ARN }}
           bedrock-inference-profile-arn: ${{ secrets.BEDROCK_INFERENCE_PROFILE_ARN }}
           test-command: npx playwright test --reporter=json
+          accessibility-command: npm run qa:accessibility
+          artifact-directories: test-results,playwright-report,.runs/<run-id>/artifacts
           comment-mode: preview
 ```
 
@@ -38,11 +40,13 @@ jobs:
 The action uploads `.runs` and expects the QA backend to write:
 
 - `qa-context.json`
+- `browser-artifacts.json`
 - `qa-report.md`
 - `test-gap-report.md`
 - `validation-status.md`
+- `accessibility-report.md` when `accessibility-command` is set
 - `github-comments.preview.json`
 
 ## Configuration
 
-Use `swarm-flow.qa.yaml` for repository defaults, then override with action inputs for PR-specific URLs, provider selection, model choice, Bedrock role/profile settings, and Playwright execution options.
+Use `swarm-flow.qa.yaml` for repository defaults, then override with action inputs for PR-specific URLs, provider selection, model choice, Bedrock role/profile settings, Playwright execution options, the optional accessibility command, and the artifact directory scan list.

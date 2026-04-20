@@ -1,10 +1,11 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { parse } from "yaml";
-import { FileRunStore, FlowRuntime } from "@swarm-flow/runtime";
+import { FileRunStore, FlowRuntime, type TddEvidenceArtifact } from "@swarm-flow/runtime";
 import {
   createPlaywrightQaBackend,
   normalizeQaConfig,
@@ -70,6 +71,18 @@ type ContextPackOptions = {
   output?: string;
 };
 
+type TddEvidenceOptions = {
+  run?: string;
+  artifact: string;
+  command: string;
+  files?: string;
+};
+
+type TddStatusOptions = {
+  run?: string;
+  artifact?: string;
+};
+
 type QaOptions = {
   backend?: QaBackendId;
   configFile?: string;
@@ -79,6 +92,8 @@ type QaOptions = {
   previewUrl?: string;
   healthcheckUrl?: string;
   testCommand?: string;
+  accessibilityCommand?: string;
+  artifactDirectories?: string;
   mode?: "suggest" | "execute" | "full";
   commentMode?: "preview" | "summary";
   environment?: string;
@@ -295,6 +310,8 @@ export function createProgram(io: CliIo = {}): Command {
     .option("--preview-url <url>", "deploy preview URL")
     .option("--healthcheck-url <url>", "URL to check before QA execution")
     .option("--test-command <command>", "test command to run for the QA backend")
+    .option("--accessibility-command <command>", "accessibility command to run for the QA backend")
+    .option("--artifact-directories <paths>", "comma-separated artifact directories to scan")
     .option("--mode <mode>", "QA mode: suggest, execute, or full")
     .option("--comment-mode <mode>", "comment behavior: preview or summary")
     .option("--environment <name>", "environment profile name")
@@ -348,6 +365,8 @@ export function createProgram(io: CliIo = {}): Command {
           previewUrl: options.previewUrl,
           healthcheckUrl: options.healthcheckUrl,
           testCommand: options.testCommand,
+          accessibilityCommand: options.accessibilityCommand,
+          artifactDirectories: options.artifactDirectories,
           mode: options.mode,
           commentMode: options.commentMode,
           environment: options.environment,
@@ -544,6 +563,61 @@ export function createProgram(io: CliIo = {}): Command {
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, content, "utf8");
       stdout(`Context pack written: ${outputPath}`);
+    });
+
+  const tdd = program.command("tdd").description("Record red/green test-first evidence for implementation artifacts.");
+  tdd
+    .command("red")
+    .requiredOption("--artifact <id>", "artifact id the evidence supports, usually tests_added")
+    .requiredOption("--command <command>", "test command expected to fail for RED evidence")
+    .option("--files <files>", "comma-separated related files")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Run a command and record valid RED evidence only when it fails.")
+    .action(async (options: TddEvidenceOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const attempt = await runEvidenceCommand(options.command, cwd, relatedFiles(options.files), (exitCode) => exitCode !== 0);
+      if (!attempt.valid) {
+        throw new Error(`red evidence command must fail; received exit code ${attempt.exitCode}`);
+      }
+      await writeTddEvidence(cwd, store, run, options.artifact, options.command, { red: attempt });
+      stdout(`Recorded red TDD evidence for ${options.artifact}`);
+    });
+
+  tdd
+    .command("green")
+    .requiredOption("--artifact <id>", "artifact id the evidence supports, usually tests_added")
+    .requiredOption("--command <command>", "test command expected to pass for GREEN evidence")
+    .option("--files <files>", "comma-separated related files")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Run a command and record valid GREEN evidence only when it passes.")
+    .action(async (options: TddEvidenceOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const attempt = await runEvidenceCommand(options.command, cwd, relatedFiles(options.files), (exitCode) => exitCode === 0);
+      if (!attempt.valid) {
+        throw new Error(`green evidence command must pass; received exit code ${attempt.exitCode}`);
+      }
+      await writeTddEvidence(cwd, store, run, options.artifact, options.command, { green: attempt });
+      stdout(`Recorded green TDD evidence for ${options.artifact}`);
+    });
+
+  tdd
+    .command("status")
+    .option("--artifact <id>", "artifact id to inspect", "tests_added")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Show red/green TDD evidence status.")
+    .action(async (options: TddStatusOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const evidence = await readTddEvidence(cwd, run, options.artifact ?? "tests_added");
+      if (!evidence) {
+        stdout(`TDD evidence for ${options.artifact ?? "tests_added"}: missing`);
+        return;
+      }
+      const red = evidence.red?.valid ? "red valid" : "red missing";
+      const green = evidence.green?.valid ? "green valid" : "green missing";
+      stdout(`TDD evidence for ${evidence.artifactId}: ${red}, ${green}`);
     });
 
   const flows = program.command("flows").description("Inspect bundled flows.");
@@ -864,6 +938,102 @@ function validateApplyPreview(run: RunState, connector: string, previewPayload: 
   }
 
   return reasons;
+}
+
+type TddEvidencePatch = Pick<TddEvidenceArtifact, "red" | "green">;
+
+async function writeTddEvidence(
+  cwd: string,
+  store: FileRunStore,
+  run: RunState,
+  artifactId: string,
+  testCommand: string,
+  patch: TddEvidencePatch
+): Promise<RunState> {
+  const previous = await readTddEvidence(cwd, run, artifactId);
+  const now = new Date().toISOString();
+  const evidence: TddEvidenceArtifact = {
+    artifactId,
+    testCommand,
+    createdAt: previous?.createdAt ?? now,
+    updatedAt: now,
+    red: patch.red ?? previous?.red,
+    green: patch.green ?? previous?.green
+  };
+  return new FlowRuntime({ repoRoot: cwd, store }).registerArtifact(run.id, {
+    id: artifactId,
+    fileName: "tdd-evidence.json",
+    phaseId: run.current_phase,
+    mediaType: "application/json",
+    content: `${JSON.stringify(evidence, null, 2)}\n`
+  });
+}
+
+async function readTddEvidence(
+  cwd: string,
+  run: RunState,
+  artifactId: string
+): Promise<TddEvidenceArtifact | undefined> {
+  const artifact = run.artifact_registry[artifactId];
+  if (!artifact) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(await readFile(resolve(cwd, ".runs", run.id, artifact.path), "utf8")) as TddEvidenceArtifact;
+  } catch {
+    return undefined;
+  }
+}
+
+async function runEvidenceCommand(
+  command: string,
+  cwd: string,
+  relatedFiles: string[],
+  isValidExitCode: (exitCode: number) => boolean
+): Promise<NonNullable<TddEvidenceArtifact["red"]>> {
+  const startedAt = new Date().toISOString();
+  const execution = await runShellCommand(command, cwd);
+  const completedAt = new Date().toISOString();
+  return {
+    startedAt,
+    completedAt,
+    exitCode: execution.exitCode,
+    stdoutSnippet: snippet(execution.stdout),
+    stderrSnippet: snippet(execution.stderr),
+    relatedFiles,
+    valid: isValidExitCode(execution.exitCode)
+  };
+}
+
+function runShellCommand(command: string, cwd: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, { cwd, shell: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (error) => {
+      resolve({ exitCode: 1, stdout, stderr: error.message });
+    });
+    child.on("close", (code) => {
+      resolve({ exitCode: code ?? 1, stdout, stderr });
+    });
+  });
+}
+
+function relatedFiles(files?: string): string[] {
+  return (files ?? "")
+    .split(",")
+    .map((file) => file.trim())
+    .filter(Boolean);
+}
+
+function snippet(value: string): string {
+  return value.slice(0, 4000);
 }
 
 async function loadRun(store: FileRunStore, runId?: string): Promise<RunState> {

@@ -143,4 +143,110 @@ describe("artifacts and approvals", () => {
     const runs = await store.list();
     expect(runs.map((run) => run.id)).toEqual(["run-2026-04-17-second-run", "run-2026-04-17-first-run"]);
   });
+
+  it("blocks implementation completion until tests_added has valid red and green evidence", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
+    const runtime = new FlowRuntime({ repoRoot: workspace, store: new FileRunStore(workspace) });
+    const run = await runtime.startFeatureRun({
+      flow: {
+        id: "feature-default",
+        name: "Feature Delivery",
+        phases: [
+          {
+            id: "implementation",
+            description: "Implement the change",
+            agents: ["implementer"],
+            required_outputs: ["code_changes", "tests_added"]
+          },
+          {
+            id: "validation",
+            description: "Validate the change",
+            agents: ["qa"],
+            required_outputs: ["validation_status"],
+            dependencies: ["implementation"]
+          }
+        ]
+      },
+      title: "Bulk case reassignment",
+      goal: "Reassign cases by region",
+      now: new Date("2026-04-17T12:00:00.000Z")
+    });
+
+    await runtime.registerArtifact(run.id, {
+      id: "code_changes",
+      fileName: "code-changes.md",
+      phaseId: "implementation",
+      mediaType: "text/markdown",
+      content: "# Code Changes\n\n- Updated the assignment flow.\n"
+    });
+    await runtime.registerArtifact(run.id, {
+      id: "tests_added",
+      fileName: "tdd-evidence.json",
+      phaseId: "implementation",
+      mediaType: "application/json",
+      content: JSON.stringify(
+        {
+          artifactId: "tests_added",
+          testCommand: "npm test packages/runtime/test/artifacts-and-approvals.test.ts",
+          createdAt: "2026-04-17T12:05:00.000Z"
+        },
+        null,
+        2
+      )
+    });
+
+    await expect(runtime.completePhase(run.id, "implementation", ["code_changes", "tests_added"])).rejects.toThrow(
+      "implementation requires valid red and green evidence for tests_added"
+    );
+  });
+
+  it("allows test_rationale to bypass tests_added when the flow permits it", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
+    const runtime = new FlowRuntime({ repoRoot: workspace, store: new FileRunStore(workspace) });
+    const run = await runtime.startFeatureRun({
+      flow: {
+        id: "feature-default",
+        name: "Feature Delivery",
+        phases: [
+          {
+            id: "implementation",
+            description: "Implement the change",
+            agents: ["implementer"],
+            required_outputs: ["code_changes", "tests_added"],
+            optional_outputs: ["test_rationale"]
+          },
+          {
+            id: "validation",
+            description: "Validate the change",
+            agents: ["qa"],
+            required_outputs: ["validation_status"],
+            dependencies: ["implementation"]
+          }
+        ]
+      },
+      title: "Bulk case reassignment",
+      goal: "Reassign cases by region",
+      now: new Date("2026-04-17T12:00:00.000Z")
+    });
+
+    await runtime.registerArtifact(run.id, {
+      id: "code_changes",
+      fileName: "code-changes.md",
+      phaseId: "implementation",
+      mediaType: "text/markdown",
+      content: "# Code Changes\n\n- Updated the assignment flow.\n"
+    });
+    await runtime.registerArtifact(run.id, {
+      id: "test_rationale",
+      fileName: "test-rationale.md",
+      phaseId: "implementation",
+      mediaType: "text/markdown",
+      content: "# Test Rationale\n\n- Existing coverage is sufficient for this slice.\n"
+    });
+
+    const updated = await runtime.completePhase(run.id, "implementation", ["code_changes", "test_rationale"]);
+
+    expect(updated.current_phase).toBe("validation");
+    expect(updated.completed_phases).toContain("implementation");
+  });
 });

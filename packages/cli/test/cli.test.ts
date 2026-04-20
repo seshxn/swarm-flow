@@ -189,6 +189,100 @@ describe("CLI", () => {
     expect(output.join("\n")).toContain("Skill lint passed");
   });
 
+  it("records red and green TDD evidence through CLI commands", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await writeFile(join(workspace, "red.mjs"), "process.exit(1);\n", "utf8");
+    await writeFile(join(workspace, "green.mjs"), "process.exit(0);\n", "utf8");
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Add evidence-backed tests"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "tdd",
+      "red",
+      "--artifact",
+      "tests_added",
+      "--command",
+      "node red.mjs"
+    ]);
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "tdd",
+      "green",
+      "--artifact",
+      "tests_added",
+      "--command",
+      "node green.mjs"
+    ]);
+    await program.parseAsync(["node", "swarm-flow", "tdd", "status"]);
+
+    const evidence = JSON.parse(
+      await readFile(join(workspace, ".runs", runId, "artifacts", "tdd-evidence.json"), "utf8")
+    );
+    expect(evidence).toMatchObject({
+      artifactId: "tests_added",
+      testCommand: "node green.mjs",
+      red: {
+        exitCode: 1,
+        valid: true
+      },
+      green: {
+        exitCode: 0,
+        valid: true
+      }
+    });
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.artifact_registry.tests_added.path).toBe("artifacts/tdd-evidence.json");
+    expect(output.join("\n")).toContain("Recorded red TDD evidence for tests_added");
+    expect(output.join("\n")).toContain("Recorded green TDD evidence for tests_added");
+    expect(output.join("\n")).toContain("TDD evidence for tests_added: red valid, green valid");
+  });
+
+  it("rejects invalid TDD red and green command outcomes", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await writeFile(join(workspace, "pass.mjs"), "process.exit(0);\n", "utf8");
+    await writeFile(join(workspace, "fail.mjs"), "process.exit(1);\n", "utf8");
+    const program = createProgram({
+      cwd: workspace,
+      stdout: () => {},
+      stderr: () => {}
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Add evidence-backed tests"]);
+    await expect(
+      program.parseAsync([
+        "node",
+        "swarm-flow",
+        "tdd",
+        "red",
+        "--artifact",
+        "tests_added",
+        "--command",
+        "node pass.mjs"
+      ])
+    ).rejects.toThrow("red evidence command must fail");
+    await expect(
+      program.parseAsync([
+        "node",
+        "swarm-flow",
+        "tdd",
+        "green",
+        "--artifact",
+        "tests_added",
+        "--command",
+        "node fail.mjs"
+      ])
+    ).rejects.toThrow("green evidence command must pass");
+  });
+
   it("lists runs and shows run details", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const flowPath = join(workspace, "flow.yaml");
@@ -339,7 +433,23 @@ describe("CLI", () => {
   it("runs the Playwright QA backend and writes governed QA artifacts", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     await import("node:fs/promises").then(({ writeFile }) =>
-      writeFile(join(workspace ?? "", "fake-test.mjs"), "process.exit(0);\n", "utf8")
+      Promise.all([
+        writeFile(
+          join(workspace ?? "", "fake-test.mjs"),
+          [
+            "import { mkdirSync, writeFileSync } from 'node:fs';",
+            "mkdirSync('playwright-report', { recursive: true });",
+            "writeFileSync('playwright-report/index.html', '<html>report</html>');",
+            "mkdirSync('test-results/spec', { recursive: true });",
+            "writeFileSync('test-results/spec/trace.zip', 'trace');",
+            "writeFileSync('test-results/spec/screenshot.png', 'screenshot');",
+            "writeFileSync('test-results/spec/video.webm', 'video');",
+            "process.exit(0);"
+          ].join("\n"),
+          "utf8"
+        ),
+        writeFile(join(workspace ?? "", "a11y.mjs"), "console.log('a11y ok');\nprocess.exit(0);\n", "utf8")
+      ])
     );
     const output: string[] = [];
     const program = createProgram({
@@ -358,7 +468,9 @@ describe("CLI", () => {
       "--target-url",
       "https://preview.example.com",
       "--test-command",
-      "node fake-test.mjs"
+      "node fake-test.mjs",
+      "--accessibility-command",
+      "node a11y.mjs"
     ]);
 
     const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "");
@@ -367,7 +479,20 @@ describe("CLI", () => {
     const preview = JSON.parse(
       await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "github-comments.preview.json"), "utf8")
     );
+    const browserArtifacts = JSON.parse(
+      await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "browser-artifacts.json"), "utf8")
+    );
+    const accessibilityReport = await readFile(
+      join(workspace, ".runs", runId ?? "missing", "artifacts", "accessibility-report.md"),
+      "utf8"
+    );
     expect(qaReport).toContain("Playwright QA Report");
+    expect(qaReport).toContain("Browser artifacts");
+    expect(browserArtifacts.artifacts.trace[0]).toContain("trace.zip");
+    expect(browserArtifacts.artifacts.screenshot[0]).toContain("screenshot.png");
+    expect(browserArtifacts.artifacts.video[0]).toContain("video.webm");
+    expect(browserArtifacts.artifacts.html[0]).toContain("playwright-report/index.html");
+    expect(accessibilityReport).toContain("Result: passed");
     expect(preview.mode).toBe("preview");
     expect(output.join("\n")).toContain("QA backend passed");
   });

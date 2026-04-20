@@ -54,6 +54,6 @@ The standalone review and QA flows are reusable capabilities. Full epic delivery
 
 ## QA Action Handoff
 
-The `qa_swarm` phase can run a local QA backend, consume existing GitHub Action QA artifacts, or dispatch a remote QA run in a later slice. It should normalize every path into the same artifact contract: `qa-context.json`, `qa-report.md`, `test-gap-report.md`, `validation-status.md`, and `github-comments.preview.json`.
+The `qa_swarm` phase can run a local QA backend, consume existing GitHub Action QA artifacts, or dispatch a remote QA run in a later slice. It should normalize every path into the same artifact contract: `qa-context.json`, `browser-artifacts.json`, `qa-report.md`, `test-gap-report.md`, `validation-status.md`, `accessibility-report.md` when applicable, and `github-comments.preview.json`.
 
 When a deploy target or preview URL is missing, `qa_swarm` should block on that missing target or record it as an explicit assumption. A completed GitHub Action is evidence, not approval; policy still decides whether `validation-status` is acceptable for delivery.

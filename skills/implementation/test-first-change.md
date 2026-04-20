@@ -26,6 +26,29 @@ Do not use for purely mechanical formatting or generated files.
 
 - Acceptance criteria or reproduction evidence exists.
 - Test command is known.
+- The implementation phase can record local TDD evidence with `swarm-flow tdd red`, `swarm-flow tdd green`, and `swarm-flow tdd status`.
+
+# Swarm-flow evidence
+
+Record the red/green run pair as `tests_added` evidence:
+
+```bash
+swarm-flow tdd red --artifact tests_added --command "<failing test command>"
+swarm-flow tdd green --artifact tests_added --command "<passing test command>"
+swarm-flow tdd status
+```
+
+The CLI registers `.runs/<run-id>/artifacts/tdd-evidence.json` with:
+
+- `artifactId`
+- `testCommand`
+- `red` and `green` attempt records
+- timestamps for each attempt
+- exit codes
+- stdout/stderr snippets
+- related files
+
+The implementation phase does not complete until `tests_added` has valid red and green evidence, unless the flow explicitly allows a `test_rationale` artifact instead.
 
 # Process
 
@@ -72,6 +95,7 @@ Record red and green evidence → register artifacts
 # Exit criteria
 
 - `tests_added` exists.
+- `tests_added` is backed by valid `tdd-evidence.json` red/green entries, or an approved `test_rationale` artifact exists when the flow allows it.
 - `code_changes` exists.
 - Red-green evidence is recorded.
 

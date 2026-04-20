@@ -26,9 +26,12 @@ swarm-flow skills inspect implementation/incremental-slice-delivery
 3. Write or identify the failing test before implementation.
 4. Make the smallest code change that satisfies the current slice.
 5. Run the focused test, then the relevant regression command.
-6. Record `tests_added` and `code_changes` as artifacts:
+6. Record `tests_added` and `code_changes` as artifacts. For `tests_added`, capture red/green evidence through the CLI and keep the generated JSON artifact:
 
 ```bash
+swarm-flow tdd red --artifact tests_added --command "<failing test command>"
+swarm-flow tdd green --artifact tests_added --command "<passing test command>"
+swarm-flow tdd status
 swarm-flow artifact add tests_added <file>
 swarm-flow artifact add code_changes <file>
 ```
@@ -37,6 +40,7 @@ swarm-flow artifact add code_changes <file>
 
 - Keep implementation mapped to `task_plan` and `acceptance_criteria`.
 - Do not broaden scope during implementation.
+- `tests_added` is not complete until valid red and green evidence exists, unless the flow explicitly allows a `test_rationale` artifact.
 - If validation fails repeatedly, move into the repair-loop workflow instead of guessing.
 
 ## Exit Criteria

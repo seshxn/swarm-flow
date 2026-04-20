@@ -91,6 +91,14 @@ inputs:
     description: Playwright or project test command.
     required: false
     default: npx playwright test --reporter=json
+  accessibility-command:
+    description: Optional accessibility command to run after the main test command.
+    required: false
+    default: ""
+  artifact-directories:
+    description: Comma-separated Playwright artifact directories to scan.
+    required: false
+    default: ""
   browser:
     description: "Browser to run: chromium, firefox, or webkit."
     required: false
@@ -166,6 +174,14 @@ runs:
         ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
         GOOGLE_API_KEY: ${{ inputs.google-api-key }}
       run: |
+        ACCESSIBILITY_ARGS=()
+        if [ -n "${{ inputs.accessibility-command }}" ]; then
+          ACCESSIBILITY_ARGS+=(--accessibility-command "${{ inputs.accessibility-command }}")
+        fi
+        ARTIFACT_DIR_ARGS=()
+        if [ -n "${{ inputs.artifact-directories }}" ]; then
+          ARTIFACT_DIR_ARGS+=(--artifact-directories "${{ inputs.artifact-directories }}")
+        fi
         npx swarm-flow qa "$QA_TARGET" \
           --backend playwright \
           --config-file "${{ inputs.config-file }}" \
@@ -173,6 +189,8 @@ runs:
           --login-url "${{ inputs.login-url }}" \
           --api-url "${{ inputs.api-url }}" \
           --test-command "${{ inputs.test-command }}" \
+          "${ACCESSIBILITY_ARGS[@]}" \
+          "${ARTIFACT_DIR_ARGS[@]}" \
           --mode "${{ inputs.mode }}" \
           --comment-mode "${{ inputs.comment-mode }}" \
           --environment "${{ inputs.environment }}" \
