@@ -7,6 +7,7 @@ import type {
   ExternalPostingSelection,
   Flow,
   HookExecution,
+  Phase,
   RunLogEntry,
   RunScope,
   RunTarget,
@@ -57,6 +58,25 @@ export type RecordConnectorPreviewInput = {
 
 export type RecordExternalPostingSelectionInput = ExternalPostingSelection & {
   now?: Date;
+};
+
+export type TddEvidenceAttempt = {
+  startedAt: string;
+  completedAt: string;
+  exitCode: number;
+  stdoutSnippet: string;
+  stderrSnippet: string;
+  relatedFiles: string[];
+  valid: boolean;
+};
+
+export type TddEvidenceArtifact = {
+  artifactId: string;
+  testCommand: string;
+  createdAt: string;
+  updatedAt: string;
+  red?: TddEvidenceAttempt;
+  green?: TddEvidenceAttempt;
 };
 
 export class FileRunStore {
@@ -344,11 +364,22 @@ export class FlowRuntime {
     }
 
     const outputSet = new Set(outputArtifactIds);
-    const missing = phase.required_outputs.filter((artifactId) => !outputSet.has(artifactId));
+    const bypassTddEvidence = canBypassTddEvidence(phase, outputSet, run.artifact_registry);
+    if (requiresTddEvidence(phase) && !bypassTddEvidence) {
+      const evidence = await loadTddEvidenceArtifact(this.store, run.id);
+      if (!isValidTddEvidenceArtifact(evidence)) {
+        throw new Error(`implementation requires valid red and green evidence for tests_added`);
+      }
+    }
+
+    const requiredOutputs = bypassTddEvidence
+      ? phase.required_outputs.filter((artifactId) => artifactId !== "tests_added")
+      : phase.required_outputs;
+    const missing = requiredOutputs.filter((artifactId) => !outputSet.has(artifactId));
     if (missing.length > 0) {
       throw new Error(`missing required outputs for ${phase.id}: ${missing.join(", ")}`);
     }
-    const unregistered = phase.required_outputs.filter((artifactId) => !run.artifact_registry[artifactId]);
+    const unregistered = requiredOutputs.filter((artifactId) => !run.artifact_registry[artifactId]);
     if (unregistered.length > 0) {
       throw new Error(`outputs are not registered artifacts for ${phase.id}: ${unregistered.join(", ")}`);
     }
@@ -462,6 +493,61 @@ function artifactTitle(artifactId: string): string {
     .split("_")
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
     .join(" ");
+}
+
+function requiresTddEvidence(phase: Pick<Phase, "required_outputs">): boolean {
+  return phase.required_outputs.includes("tests_added");
+}
+
+function canBypassTddEvidence(
+  phase: Pick<Phase, "required_outputs" | "optional_outputs">,
+  outputArtifactIds: Set<string>,
+  artifactRegistry: RunState["artifact_registry"]
+): boolean {
+  const testRationaleAllowed =
+    phase.required_outputs.includes("test_rationale") || phase.optional_outputs.includes("test_rationale");
+  return testRationaleAllowed && outputArtifactIds.has("test_rationale") && Boolean(artifactRegistry.test_rationale);
+}
+
+export async function loadTddEvidenceArtifact(
+  store: FileRunStore,
+  runId: string,
+  artifactId = "tests_added"
+): Promise<TddEvidenceArtifact | undefined> {
+  const run = await store.load(runId);
+  const artifact = run.artifact_registry[artifactId];
+  if (!artifact || artifact.media_type !== "application/json") {
+    return undefined;
+  }
+
+  try {
+    const raw = await readFile(join(store.runPath(runId), artifact.path), "utf8");
+    return JSON.parse(raw) as TddEvidenceArtifact;
+  } catch {
+    return undefined;
+  }
+}
+
+function isValidTddEvidenceArtifact(value: TddEvidenceArtifact | undefined): boolean {
+  if (!value || value.artifactId !== "tests_added" || typeof value.testCommand !== "string") {
+    return false;
+  }
+
+  return isValidTddAttempt(value.red) && isValidTddAttempt(value.green) && value.red.valid && value.green.valid;
+}
+
+function isValidTddAttempt(value: TddEvidenceAttempt | undefined): value is TddEvidenceAttempt {
+  return Boolean(
+    value &&
+      typeof value.startedAt === "string" &&
+      typeof value.completedAt === "string" &&
+      typeof value.exitCode === "number" &&
+      typeof value.stdoutSnippet === "string" &&
+      typeof value.stderrSnippet === "string" &&
+      Array.isArray(value.relatedFiles) &&
+      value.relatedFiles.every((entry) => typeof entry === "string") &&
+      typeof value.valid === "boolean"
+  );
 }
 
 function dateStamp(date: Date): string {
