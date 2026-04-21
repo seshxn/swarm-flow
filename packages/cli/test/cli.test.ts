@@ -283,6 +283,45 @@ describe("CLI", () => {
     ).rejects.toThrow("green evidence command must pass");
   });
 
+  it("records timed out TDD evidence with bounded stderr context", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await writeFile(join(workspace, "slow.mjs"), "setTimeout(() => process.exit(0), 1000);\n", "utf8");
+    const previousTimeout = process.env.SWARM_FLOW_COMMAND_TIMEOUT_MS;
+    process.env.SWARM_FLOW_COMMAND_TIMEOUT_MS = "25";
+    const program = createProgram({
+      cwd: workspace,
+      stdout: () => {},
+      stderr: () => {}
+    });
+
+    try {
+      await program.parseAsync(["node", "swarm-flow", "start", "Add timeout evidence"]);
+      await program.parseAsync([
+        "node",
+        "swarm-flow",
+        "tdd",
+        "red",
+        "--artifact",
+        "tests_added",
+        "--command",
+        "node slow.mjs"
+      ]);
+
+      const runId = (await import("node:fs/promises").then(({ readdir }) => readdir(join(workspace ?? "", ".runs"))))[0];
+      const evidence = JSON.parse(
+        await readFile(join(workspace, ".runs", runId ?? "missing", "artifacts", "tdd-evidence.json"), "utf8")
+      );
+      expect(evidence.red.exitCode).toBe(124);
+      expect(evidence.red.stderrSnippet).toContain("Command timed out after 25ms");
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.SWARM_FLOW_COMMAND_TIMEOUT_MS;
+      } else {
+        process.env.SWARM_FLOW_COMMAND_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  });
+
   it("lists runs and shows run details", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const flowPath = join(workspace, "flow.yaml");

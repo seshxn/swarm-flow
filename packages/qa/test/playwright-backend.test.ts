@@ -30,6 +30,61 @@ describe("Playwright QA backend", () => {
     await expect(readFile(result.artifacts.validationStatus, "utf8")).resolves.toContain("passed");
   });
 
+  it("fails with a clear timeout error when the test command exceeds the configured timeout", async () => {
+    const workspace = await mkdtemp(join(tmpdir(), "swarm-flow-qa-"));
+    await writeFile(join(workspace, "slow-test.mjs"), "setTimeout(() => process.exit(0), 1000);\n", "utf8");
+
+    const backend = createPlaywrightQaBackend();
+    const result = await backend.execute({
+      runId: "run-qa-timeout",
+      target: {
+        type: "url",
+        value: "https://staging.example.com"
+      },
+      backend: "playwright",
+      targetUrl: "https://staging.example.com",
+      mode: "execute",
+      testCommand: "node slow-test.mjs",
+      workingDirectory: workspace,
+      outputDirectory: join(workspace, ".runs", "run-qa-timeout", "artifacts"),
+      config: {
+        backend: "playwright",
+        mode: "execute",
+        commentMode: "preview",
+        target: {
+          environment: "staging"
+        },
+        browser: {
+          name: "chromium",
+          headless: true,
+          timeoutMs: 25,
+          retries: 0,
+          screenshot: "failures",
+          trace: "retain-on-failure",
+          video: "off"
+        },
+        test: {
+          command: "node slow-test.mjs",
+          directory: "tests",
+          generatedDirectory: "tests/swarm-flow"
+        },
+        artifacts: {
+          directories: ["test-results", "playwright-report", ".runs/run-qa-timeout/artifacts"]
+        },
+        accessibility: {},
+        ai: {
+          provider: "openai",
+          model: "gpt-5.4-mini"
+        }
+      }
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.exitCode).toBe(124);
+    expect(result.errors.join("\n")).toContain("Command timed out after 25ms");
+    await expect(readFile(result.artifacts.validationStatus, "utf8")).resolves.toContain("failed");
+  });
+
   it("collects browser artifacts and writes an accessibility report when configured", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "swarm-flow-qa-"));
     await writeFile(

@@ -1005,24 +1005,56 @@ async function runEvidenceCommand(
   };
 }
 
+const maxCommandOutput = 16_384;
+const defaultEvidenceTimeoutMs = 30_000;
+
 function runShellCommand(command: string, cwd: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(command, { cwd, shell: true });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    const timeoutMs = Number(process.env.SWARM_FLOW_COMMAND_TIMEOUT_MS ?? defaultEvidenceTimeoutMs);
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    function finish(exitCode: number, finalStderr = stderr): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve({ exitCode, stdout, stderr: finalStderr });
+    }
+
     child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
+      stdout = appendCommandOutput(stdout, String(chunk));
     });
     child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
+      stderr = appendCommandOutput(stderr, String(chunk));
     });
     child.on("error", (error) => {
-      resolve({ exitCode: 1, stdout, stderr: error.message });
+      finish(1, appendCommandOutput(stderr, error.message));
     });
     child.on("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+      if (timedOut) {
+        finish(124, appendCommandOutput(stderr, `Command timed out after ${timeoutMs}ms: ${command}`));
+        return;
+      }
+      finish(code ?? 1);
     });
   });
+}
+
+function appendCommandOutput(existing: string, chunk: string): string {
+  const next = existing + chunk;
+  if (next.length <= maxCommandOutput) {
+    return next;
+  }
+  return next.slice(next.length - maxCommandOutput);
 }
 
 function relatedFiles(files?: string): string[] {
