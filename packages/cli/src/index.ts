@@ -14,7 +14,7 @@ import {
   type QaBackendId
 } from "@swarm-flow/qa";
 import { evaluatePhaseEntry, validateFlow, type Policy, type RunScope, type RunState, type RunTarget } from "@swarm-flow/core";
-import { StandardAgentAdapter } from "@swarm-flow/adapters";
+import { createLocalSubagentDispatchManifest, StandardAgentAdapter } from "@swarm-flow/adapters";
 
 export type CliIo = {
   cwd?: string;
@@ -69,6 +69,13 @@ type PolicyCheckOptions = {
 type ContextPackOptions = {
   run?: string;
   output?: string;
+};
+
+type AgentsPlanOptions = {
+  run?: string;
+  phase?: string;
+  output?: string;
+  worktreeRoot?: string;
 };
 
 type TddEvidenceOptions = {
@@ -213,17 +220,21 @@ export function createProgram(io: CliIo = {}): Command {
       const previewPayload = JSON.parse(rawPreview);
       const reasons = validateApplyPreview(run, connector, previewPayload);
       const message = [
-        "Live connector apply is not supported in v0.1. Keep writes in preview mode and record user selections instead.",
+        "Live connector apply is not supported in v0.2. Keep writes in preview mode and record user selections instead.",
         ...reasons
       ].join(" ");
-      run.policy_decisions = [
-        ...run.policy_decisions,
-        {
-          allowed: false,
-          reasons: [message]
+      await recordPolicyDecision(store, run, {
+        allowed: false,
+        reasons: [message],
+        data: {
+          command: "apply",
+          connector,
+          preview_file: previewFile,
+          idempotency_key: isRecord(previewPayload)
+            ? stringValue(previewPayload.idempotencyKey) ?? stringValue(previewPayload.idempotency_key)
+            : undefined
         }
-      ];
-      await store.save(run);
+      });
       throw new Error(message);
     });
 
@@ -252,6 +263,7 @@ export function createProgram(io: CliIo = {}): Command {
       
       const adapter = new StandardAgentAdapter();
       const contextPack = await renderContextPack(run);
+      const startedAt = new Date().toISOString();
       const result = await adapter.invoke({
         runId: run.id,
         repoRoot: cwd,
@@ -265,6 +277,16 @@ export function createProgram(io: CliIo = {}): Command {
       });
 
       if (!result.ok) {
+         await recordAgentExecution(store, run.id, {
+           adapter_id: adapter.id,
+           agent_id: phase.agents[0] || "primary",
+           phase_id: phaseId,
+           status: "failed",
+           started_at: startedAt,
+           completed_at: new Date().toISOString(),
+           reasons: result.reasons,
+           artifact_ids: Object.keys(result.artifacts_created)
+         });
          throw new Error(`Agent execution failed: ${result.reasons.join(", ")}`);
       }
 
@@ -279,6 +301,16 @@ export function createProgram(io: CliIo = {}): Command {
            phaseId
          });
       }
+      await recordAgentExecution(store, run.id, {
+        adapter_id: adapter.id,
+        agent_id: phase.agents[0] || "primary",
+        phase_id: phaseId,
+        status: "completed",
+        started_at: startedAt,
+        completed_at: new Date().toISOString(),
+        reasons: [],
+        artifact_ids: Object.keys(result.artifacts_created)
+      });
       
       stdout(`\u2705 Auto-execution complete for phase ${phaseId}.`);
     });
@@ -525,8 +557,24 @@ export function createProgram(io: CliIo = {}): Command {
       if (nextPhase) {
         const decision = await evaluatePhaseGate(cwd, run, nextPhase.id, options.policy);
         if (!decision.allowed) {
+          await recordPolicyDecision(store, run, {
+            ...decision,
+            data: {
+              command: "complete",
+              from_phase: phase.id,
+              to_phase: nextPhase.id
+            }
+          });
           throw new Error(`cannot enter ${nextPhase.id}: ${decision.reasons.join("; ")}`);
         }
+        await recordPolicyDecision(store, run, {
+          ...decision,
+          data: {
+            command: "complete",
+            from_phase: phase.id,
+            to_phase: nextPhase.id
+          }
+        });
       }
       const updated = await new FlowRuntime({ repoRoot: cwd, store }).completePhase(run.id, phaseId, outputIds);
       stdout(`Completed ${phaseId}; current phase: ${updated.current_phase}`);
@@ -541,6 +589,13 @@ export function createProgram(io: CliIo = {}): Command {
     .action(async (options: PolicyCheckOptions) => {
       const run = await loadRun(new FileRunStore(cwd), options.run);
       const decision = await evaluatePhaseGate(cwd, run, run.current_phase, options.policy);
+      await recordPolicyDecision(new FileRunStore(cwd), run, {
+        ...decision,
+        data: {
+          command: "policy check",
+          phase_id: run.current_phase
+        }
+      });
       if (!decision.allowed) {
         throw new Error(`Policy check failed for ${run.current_phase}: ${decision.reasons.join("; ")}`);
       }
@@ -563,6 +618,51 @@ export function createProgram(io: CliIo = {}): Command {
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, content, "utf8");
       stdout(`Context pack written: ${outputPath}`);
+    });
+
+  const agentsCommand = program.command("agents").description("Plan host-neutral specialist agent dispatch.");
+  agentsCommand
+    .command("plan")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--phase <phase>", "phase id; defaults to current phase")
+    .option("--output <path>", "manifest output path; defaults to the run context directory")
+    .option("--worktree-root <path>", "recommended worktree root for subagents", ".worktrees")
+    .description("Write a subagent dispatch manifest and matching context pack.")
+    .action(async (options: AgentsPlanOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const phaseId = options.phase ?? run.current_phase;
+      const phase = run.flow_snapshot.phases.find((candidate) => candidate.id === phaseId);
+      if (!phase) {
+        throw new Error(`Phase ${phaseId} not found in flow ${run.flow_id}`);
+      }
+
+      const contextRun = {
+        ...run,
+        current_phase: phase.id
+      };
+      const contextPack = await renderContextPack(contextRun);
+      const contextPath = resolve(cwd, ".runs", run.id, "context", `${phase.id}-context.md`);
+      await mkdir(dirname(contextPath), { recursive: true });
+      await writeFile(contextPath, contextPack, "utf8");
+
+      const manifest = createLocalSubagentDispatchManifest({
+        runId: run.id,
+        phaseId: phase.id,
+        phaseDescription: phase.description,
+        phasePurpose: phase.purpose,
+        agentRoles: [...phase.agents, ...phase.optional_agents],
+        requiredOutputs: phase.required_outputs,
+        contextPackPath: contextPath.replace(`${cwd}/`, ""),
+        worktreeRoot: options.worktreeRoot
+      });
+      const outputPath = options.output
+        ? resolve(cwd, options.output)
+        : resolve(cwd, ".runs", run.id, "context", "subagent-dispatch.json");
+      await mkdir(dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      stdout(`Subagent dispatch manifest written: ${outputPath}`);
+      stdout(`Context pack written: ${contextPath}`);
     });
 
   const tdd = program.command("tdd").description("Record red/green test-first evidence for implementation artifacts.");
@@ -902,6 +1002,61 @@ async function readQaConfigFile(
     }
     throw error;
   }
+}
+
+async function recordPolicyDecision(
+  store: FileRunStore,
+  run: RunState,
+  decision: { allowed: boolean; reasons: string[]; data?: unknown }
+): Promise<RunState> {
+  const current = await store.load(run.id);
+  const timestamp = new Date().toISOString();
+  const updated: RunState = {
+    ...current,
+    policy_decisions: [...current.policy_decisions, decision],
+    logs: [
+      ...current.logs,
+      {
+        at: timestamp,
+        level: decision.allowed ? "info" : "warn",
+        message: "Policy decision recorded",
+        data: decision.data
+      }
+    ],
+    updated_at: timestamp
+  };
+  await store.save(updated);
+  return updated;
+}
+
+async function recordAgentExecution(
+  store: FileRunStore,
+  runId: string,
+  execution: Record<string, unknown>
+): Promise<RunState> {
+  const current = await store.load(runId);
+  const timestamp = new Date().toISOString();
+  const updated: RunState = {
+    ...current,
+    agent_executions: [...current.agent_executions, execution],
+    logs: [
+      ...current.logs,
+      {
+        at: timestamp,
+        level: execution.status === "failed" ? "error" : "info",
+        message: "Agent execution recorded",
+        data: {
+          phase_id: execution.phase_id,
+          agent_id: execution.agent_id,
+          adapter_id: execution.adapter_id,
+          status: execution.status
+        }
+      }
+    ],
+    updated_at: timestamp
+  };
+  await store.save(updated);
+  return updated;
 }
 
 function validateApplyPreview(run: RunState, connector: string, previewPayload: unknown): string[] {

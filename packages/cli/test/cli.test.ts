@@ -153,13 +153,30 @@ describe("CLI", () => {
     await expect(program.parseAsync(["node", "swarm-flow", "complete", "intake"])).rejects.toThrow(
       "planning requires approval"
     );
+    let runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.policy_decisions.at(-1)).toMatchObject({
+      allowed: false,
+      data: {
+        command: "complete",
+        from_phase: "intake",
+        to_phase: "planning"
+      }
+    });
 
     await program.parseAsync(["node", "swarm-flow", "approve", "planning"]);
     await program.parseAsync(["node", "swarm-flow", "complete", "intake"]);
 
-    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
     expect(runState.completed_phases).toEqual(["intake"]);
     expect(runState.current_phase).toBe("planning");
+    expect(runState.policy_decisions.at(-1)).toMatchObject({
+      allowed: true,
+      data: {
+        command: "complete",
+        from_phase: "intake",
+        to_phase: "planning"
+      }
+    });
     expect(runState.artifact_registry.feature_brief.path).toBe("artifacts/feature-brief.md");
     expect(output.join("\n")).toContain("Registered artifact feature_brief");
     expect(output.join("\n")).toContain("Completed intake; current phase: planning");
@@ -181,12 +198,51 @@ describe("CLI", () => {
     await program.parseAsync(["node", "swarm-flow", "skills", "lint"]);
 
     const context = await readFile(join(workspace, ".runs", runId, "context", "current-phase-context.md"), "utf8");
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
     expect(context).toContain("# swarm-flow Context Pack");
     expect(context).toContain("Current phase: `intake`");
     expect(context).toContain("Required outputs");
+    expect(runState.policy_decisions[0]).toMatchObject({
+      allowed: true,
+      data: {
+        command: "policy check",
+        phase_id: "intake"
+      }
+    });
     expect(output.join("\n")).toContain("Policy check passed for intake");
     expect(output.join("\n")).toContain("Context pack written:");
     expect(output.join("\n")).toContain("Skill lint passed");
+  });
+
+  it("writes a host-neutral subagent dispatch plan and context pack", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Plan a governed launch checklist"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "agents", "plan", "--worktree-root", "/tmp/swarm-flow-agents"]);
+
+    const manifest = JSON.parse(
+      await readFile(join(workspace, ".runs", runId, "context", "subagent-dispatch.json"), "utf8")
+    );
+    const context = await readFile(join(workspace, ".runs", runId, "context", "intake-context.md"), "utf8");
+    expect(manifest).toMatchObject({
+      kind: "subagent-dispatch",
+      runId,
+      phaseId: "intake",
+      contextPackPath: `.runs/${runId}/context/intake-context.md`
+    });
+    expect(manifest.taskPackets[0]).toMatchObject({
+      agentRole: "pm",
+      recommendedWorktreePath: `/tmp/swarm-flow-agents/${runId}-intake-pm`
+    });
+    expect(context).toContain("Current phase: `intake`");
+    expect(output.join("\n")).toContain("Subagent dispatch manifest written:");
   });
 
   it("records red and green TDD evidence through CLI commands", async () => {
@@ -716,6 +772,28 @@ describe("CLI", () => {
     expect(output.join("\n")).toContain("Comment selection recorded");
   });
 
+  it("records failed auto agent executions for auditability", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Generate governed artifacts"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await expect(program.parseAsync(["node", "swarm-flow", "auto"])).rejects.toThrow("Agent execution failed");
+
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.agent_executions[0]).toMatchObject({
+      adapter_id: "standard",
+      agent_id: "pm",
+      phase_id: "intake",
+      status: "failed"
+    });
+  });
+
   it("refuses to apply preview payloads as live connector writes", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const flowPath = join(workspace, "flow.yaml");
@@ -774,6 +852,16 @@ describe("CLI", () => {
     await expect(program.parseAsync(["node", "swarm-flow", "apply", "filesystem", "filesystem.preview.json"])).rejects.toThrow(
       "Live connector apply is not supported"
     );
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.policy_decisions.at(-1)).toMatchObject({
+      allowed: false,
+      data: {
+        command: "apply",
+        connector: "filesystem",
+        preview_file: "filesystem.preview.json"
+      }
+    });
     await expect(readFile(join(workspace, "should-not-exist.txt"), "utf8")).rejects.toThrow();
   });
 });
