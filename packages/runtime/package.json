@@ -1,6 +1,6 @@
 {
   "name": "@swarm-flow/runtime",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,7 +15,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@swarm-flow/core": "0.1.0",
+    "@swarm-flow/core": "0.2.0",
     "yaml": "^2.7.0"
   },
   "devDependencies": {

@@ -7,7 +7,6 @@ import type {
   ExternalPostingSelection,
   Flow,
   HookExecution,
-  Phase,
   RunLogEntry,
   RunScope,
   RunTarget,
@@ -79,6 +78,25 @@ export type TddEvidenceArtifact = {
   green?: TddEvidenceAttempt;
 };
 
+export type PhaseGateStage = "completion" | "entry";
+
+export type PhaseGateEvaluationInput = {
+  run: RunState;
+  phaseId: string;
+  stage: PhaseGateStage;
+  outputArtifactIds?: Iterable<string>;
+  store: FileRunStore;
+};
+
+export type PhaseGateEvaluation = {
+  allowed: boolean;
+  reasons: string[];
+  phaseId: string;
+  stage: PhaseGateStage;
+  checked_conditions: string[];
+  informational_conditions: string[];
+};
+
 export class FileRunStore {
   readonly runsRoot: string;
 
@@ -138,6 +156,129 @@ export class FileRunStore {
   }
 }
 
+export async function evaluatePhaseCompletionGates(
+  input: Omit<PhaseGateEvaluationInput, "stage">
+): Promise<PhaseGateEvaluation> {
+  return evaluatePhaseGates({
+    ...input,
+    stage: "completion"
+  });
+}
+
+export async function evaluatePhaseEntryGates(
+  input: Omit<PhaseGateEvaluationInput, "stage">
+): Promise<PhaseGateEvaluation> {
+  return evaluatePhaseGates({
+    ...input,
+    stage: "entry"
+  });
+}
+
+export async function evaluatePhaseGates(input: PhaseGateEvaluationInput): Promise<PhaseGateEvaluation> {
+  const phase = input.run.flow_snapshot.phases.find((candidate) => candidate.id === input.phaseId);
+  if (!phase) {
+    return {
+      allowed: false,
+      reasons: [`phase ${input.phaseId} is not present in flow ${input.run.flow_id}`],
+      phaseId: input.phaseId,
+      stage: input.stage,
+      checked_conditions: [],
+      informational_conditions: []
+    };
+  }
+
+  const outputSet = new Set(input.outputArtifactIds ?? []);
+  const reasons: string[] = [];
+  const checkedConditions: string[] = [];
+  const informationalConditions: string[] = [];
+
+  const requiresTestRationale = phase.required_outputs.includes("tests_added");
+  const allowsTestRationale =
+    phase.required_outputs.includes("test_rationale") || phase.optional_outputs.includes("test_rationale");
+  const testRationaleBypass =
+    requiresTestRationale &&
+    allowsTestRationale &&
+    outputSet.has("test_rationale") &&
+    Boolean(input.run.artifact_registry.test_rationale);
+
+  if (input.stage === "completion") {
+    const requiredOutputs = testRationaleBypass
+      ? phase.required_outputs.filter((artifactId) => artifactId !== "tests_added")
+      : phase.required_outputs;
+
+    for (const artifactId of requiredOutputs) {
+      if (!outputSet.has(artifactId)) {
+        reasons.push(`missing required outputs for ${phase.id}: ${artifactId}`);
+      }
+      if (!input.run.artifact_registry[artifactId]) {
+        reasons.push(`outputs are not registered artifacts for ${phase.id}: ${artifactId}`);
+      }
+    }
+
+    if (requiresTestRationale && !testRationaleBypass) {
+      const evidence = await loadTddEvidenceArtifact(input.store, input.run.id);
+      if (!isValidTddEvidenceArtifact(evidence)) {
+        reasons.push(`implementation requires valid red and green evidence for tests_added`);
+      }
+    }
+
+    if (phase.approval_required && !input.run.approvals[phase.id]) {
+      reasons.push(`${phase.id} requires approval`);
+    }
+  }
+
+  const approvalConditions = phase.transition_conditions.filter((condition) => /approval/i.test(condition));
+  if (approvalConditions.length > 0 && !input.run.approvals[phase.id]) {
+    checkedConditions.push(...approvalConditions);
+    reasons.push(`${phase.id} requires approval`);
+  }
+
+  const previewConditions = phase.transition_conditions.filter((condition) =>
+    /external writes? are previewed|preview(?:ed)? before write|preview only/i.test(condition)
+  );
+  if (previewConditions.length > 0) {
+    checkedConditions.push(...previewConditions);
+    if (input.run.connector_write_previews.length === 0) {
+      reasons.push(`${phase.id} requires at least one external write preview`);
+    }
+  }
+
+  const validationConditions = phase.transition_conditions.filter((condition) =>
+    /validation_status.*passing|validation passed|validation_status is passing/i.test(condition)
+  );
+  if (validationConditions.length > 0) {
+    checkedConditions.push(...validationConditions);
+    const validationStatus = await readValidationStatus(input.store, input.run);
+    if (!validationStatus.isPassing) {
+      reasons.push(`${phase.id} requires validation to be passing`);
+    }
+  }
+
+  const blockerConditions = phase.transition_conditions.filter((condition) => /assumption|risk/i.test(condition));
+  if (blockerConditions.length > 0 || phase.id === "delivery") {
+    checkedConditions.push(...blockerConditions);
+    if (input.run.unresolved_assumptions.length > 0) {
+      reasons.push(`${phase.id} has unresolved assumptions`);
+    }
+    if (input.run.unresolved_risks.length > 0) {
+      reasons.push(`${phase.id} has unresolved risks`);
+    }
+  }
+
+  if (checkedConditions.length === 0) {
+    informationalConditions.push(...phase.transition_conditions);
+  }
+
+  return {
+    allowed: reasons.length === 0,
+    reasons: [...new Set(reasons)],
+    phaseId: phase.id,
+    stage: input.stage,
+    checked_conditions: [...new Set(checkedConditions)],
+    informational_conditions: [...new Set(informationalConditions)]
+  };
+}
+
 export class FlowRuntime {
   private readonly store: FileRunStore;
   private readonly hooks: HookRunner;
@@ -158,7 +299,8 @@ export class FlowRuntime {
     const timestamp = now.toISOString();
     const runId = `run-${dateStamp(now)}-${slugify(input.title)}`;
     const firstPhase = flow.phases[0];
-    const initialArtifactId = firstPhase.required_outputs[0] ?? "intake_brief";
+    // Keep the first auto artifact aligned with the first declared phase output for compatibility.
+    const initialArtifactId = firstPhase.required_outputs[0] ?? "feature_brief";
     const initialArtifactPath = `artifacts/${artifactIdToFileName(initialArtifactId)}`;
     const initialArtifact = renderInitialArtifact({
       artifactId: initialArtifactId,
@@ -363,25 +505,14 @@ export class FlowRuntime {
       throw new Error(`cannot complete phase ${phaseId}; current phase is ${phase.id}`);
     }
 
-    const outputSet = new Set(outputArtifactIds);
-    const bypassTddEvidence = canBypassTddEvidence(phase, outputSet, run.artifact_registry);
-    if (requiresTddEvidence(phase) && !bypassTddEvidence) {
-      const evidence = await loadTddEvidenceArtifact(this.store, run.id);
-      if (!isValidTddEvidenceArtifact(evidence)) {
-        throw new Error(`implementation requires valid red and green evidence for tests_added`);
-      }
-    }
-
-    const requiredOutputs = bypassTddEvidence
-      ? phase.required_outputs.filter((artifactId) => artifactId !== "tests_added")
-      : phase.required_outputs;
-    const missing = requiredOutputs.filter((artifactId) => !outputSet.has(artifactId));
-    if (missing.length > 0) {
-      throw new Error(`missing required outputs for ${phase.id}: ${missing.join(", ")}`);
-    }
-    const unregistered = requiredOutputs.filter((artifactId) => !run.artifact_registry[artifactId]);
-    if (unregistered.length > 0) {
-      throw new Error(`outputs are not registered artifacts for ${phase.id}: ${unregistered.join(", ")}`);
+    const completionGate = await evaluatePhaseCompletionGates({
+      run,
+      phaseId: phase.id,
+      outputArtifactIds,
+      store: this.store
+    });
+    if (!completionGate.allowed) {
+      throw new Error(completionGate.reasons.join("; "));
     }
 
     const completed = [...new Set([...run.completed_phases, phase.id])];
@@ -395,6 +526,20 @@ export class FlowRuntime {
     // execute after hooks before committing the phase transition so failed gates keep the run in place
     if (phase.hooks?.after) {
       assertHooksPassed(await this.hooks.executeHooks(run.id, "after_phase", phase.hooks.after, phase.id));
+    }
+
+    if (nextPhase) {
+      const nextPhaseGate = await evaluatePhaseEntryGates({
+        run: {
+          ...run,
+          completed_phases: completed
+        },
+        phaseId: nextPhase.id,
+        store: this.store
+      });
+      if (!nextPhaseGate.allowed) {
+        throw new Error(nextPhaseGate.reasons.join("; "));
+      }
     }
 
     // execute entry hooks before moving into the next phase
@@ -495,18 +640,48 @@ function artifactTitle(artifactId: string): string {
     .join(" ");
 }
 
-function requiresTddEvidence(phase: Pick<Phase, "required_outputs">): boolean {
-  return phase.required_outputs.includes("tests_added");
-}
+async function readValidationStatus(
+  store: FileRunStore,
+  run: RunState
+): Promise<{ isPassing: boolean }> {
+  const artifact = run.artifact_registry.validation_status;
+  if (!artifact) {
+    return { isPassing: false };
+  }
 
-function canBypassTddEvidence(
-  phase: Pick<Phase, "required_outputs" | "optional_outputs">,
-  outputArtifactIds: Set<string>,
-  artifactRegistry: RunState["artifact_registry"]
-): boolean {
-  const testRationaleAllowed =
-    phase.required_outputs.includes("test_rationale") || phase.optional_outputs.includes("test_rationale");
-  return testRationaleAllowed && outputArtifactIds.has("test_rationale") && Boolean(artifactRegistry.test_rationale);
+  try {
+    const raw = await readFile(join(store.runPath(run.id), artifact.path), "utf8");
+    const content = raw.toLowerCase();
+    if (/repair loop is opened|repair loop opened/.test(content)) {
+      return { isPassing: true };
+    }
+    if (/\bpassed\b|\bpassing\b/.test(content) && !/\bfailed\b|\bfailing\b/.test(content)) {
+      return { isPassing: true };
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (parsed && typeof parsed === "object") {
+        const values = ["status", "validation_status", "state", "result", "outcome"].flatMap((key) => {
+          const value = (parsed as Record<string, unknown>)[key];
+          return typeof value === "string" ? [value.toLowerCase()] : [];
+        });
+        if (
+          values.some((value) => /repair loop is opened|repair loop opened/.test(value)) ||
+          (values.some((value) => /\bpassed\b|\bpassing\b/.test(value)) &&
+            !values.some((value) => /\bfailed\b|\bfailing\b/.test(value)))
+        ) {
+          return { isPassing: true };
+        }
+      }
+    } catch {
+      // Non-JSON validation status artifacts are valid.
+    }
+  } catch {
+    return { isPassing: false };
+  }
+
+  return { isPassing: false };
 }
 
 export async function loadTddEvidenceArtifact(

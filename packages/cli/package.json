@@ -1,6 +1,6 @@
 {
   "name": "@swarm-flow/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -17,10 +17,10 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@swarm-flow/adapters": "0.1.0",
-    "@swarm-flow/core": "0.1.0",
-    "@swarm-flow/qa": "0.1.0",
-    "@swarm-flow/runtime": "0.1.0",
+    "@swarm-flow/adapters": "0.2.0",
+    "@swarm-flow/core": "0.2.0",
+    "@swarm-flow/qa": "0.2.0",
+    "@swarm-flow/runtime": "0.2.0",
     "commander": "^12.1.0",
     "yaml": "^2.7.0"
   },

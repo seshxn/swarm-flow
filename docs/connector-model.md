@@ -23,7 +23,7 @@ All writes should support:
 - rollback metadata
 - write log entry
 
-In v0.1, starter connectors are preview-first implementations. They make the integration contract concrete without writing to live Jira, Confluence, GitHub, or CI systems.
+In v0.2, starter connectors are preview-first implementations. They make the integration contract concrete without writing to live Jira, Confluence, GitHub, or CI systems.
 
 ## First Connectors
 
