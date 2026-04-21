@@ -99,7 +99,7 @@ describe("validateFlow", () => {
   });
 
   it("validates epic delivery and standalone swarm flows", async () => {
-    const flowIds = ["epic-delivery", "review-only", "qa-only"];
+    const flowIds = ["feature-default", "epic-delivery", "review-only", "qa-only"];
 
     for (const flowId of flowIds) {
       const flow = parse(await readFile(resolve(process.cwd(), "flows", `${flowId}.yaml`), "utf8")) as unknown;
@@ -109,5 +109,26 @@ describe("validateFlow", () => {
       expect(result.ok).toBe(true);
       expect(result.flow?.id).toBe(flowId);
     }
+  });
+
+  it("rejects flows that allow test rationale without declaring it optional", () => {
+    const result = validateFlow({
+      id: "feature-default",
+      name: "Feature Delivery",
+      phases: [
+        {
+          id: "implementation",
+          description: "Implement the change",
+          agents: ["implementer"],
+          required_outputs: ["code_changes", "tests_added"],
+          transition_conditions: ["tests_added or test rationale is registered"]
+        }
+      ]
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain(
+      "phase implementation references test rationale but does not declare optional_outputs: [test_rationale]"
+    );
   });
 });
