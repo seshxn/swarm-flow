@@ -176,7 +176,7 @@ swarm-flow is built for that lane: SDLC orchestration for AI-assisted delivery.
 
 ## Current Status
 
-v0.1 is a CLI-first local orchestration foundation. It includes:
+v0.2 is a CLI-first local orchestration foundation with agent integration, QA artifact capture, hook execution, and governed audit trails. It includes:
 
 - typed flow validation
 - file-backed run state
@@ -185,6 +185,7 @@ v0.1 is a CLI-first local orchestration foundation. It includes:
 - agent-facing phase, artifact, policy, completion, and context-pack commands
 - bundled skill linting
 - approval recording
+- persisted hook execution records
 - connector preview recording
 - preview-safe connector contracts
 - CLI inspection commands

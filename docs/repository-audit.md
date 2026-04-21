@@ -1,6 +1,6 @@
 # Repository Audit
 
-This audit records the second-phase hardening pass that moved swarm-flow from an initial draft toward a publishable v0.1 foundation.
+This audit records the second-phase hardening pass that moved swarm-flow from an initial draft toward a publishable foundation.
 
 ## Strengths Found
 
@@ -18,7 +18,7 @@ This audit records the second-phase hardening pass that moved swarm-flow from an
 - Flows were readable but lacked transition semantics. The feature flow now includes phase purpose, transition conditions, output expectations, and risk escalation markers.
 - Demo artifacts were too thin. The sample run now contains realistic planning, design, validation, delivery, and external preview artifacts.
 
-## Known v0.1 Limits
+## Known v0.2 Limits
 
 - Jira, Confluence, GitHub, and CI connectors are preview-safe starter implementations, not live API clients.
 - The runtime persists state locally. The headless `auto` command now receives a current-phase context pack, but full autonomous agent execution is still early.

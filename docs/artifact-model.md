@@ -4,7 +4,7 @@ Artifacts are the heart of swarm-flow.
 
 Agents are temporary. Artifacts are durable.
 
-## Core v0.1 Artifacts
+## Core v0.2 Artifacts
 
 - `feature-brief.md`
 - `discovery-report.md`

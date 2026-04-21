@@ -48,7 +48,7 @@ flowchart LR
 
 ## Storage
 
-v0.1 uses a file-backed store:
+v0.2 uses a file-backed store:
 
 ```text
 .runs/
