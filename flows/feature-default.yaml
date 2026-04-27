@@ -85,6 +85,7 @@ phases:
     purpose: Make scoped changes in evidence-backed slices.
     agents: [implementer]
     required_outputs: [code_changes, tests_added]
+    optional_outputs: [test_rationale]
     dependencies: [ticketing]
     transition_conditions:
       - code_changes map to task_plan

@@ -293,6 +293,15 @@ export function validateFlow(candidate: unknown): ValidationResult {
     errors.push(`phase dependency cycle detected: ${cycle.join(" -> ")}`);
   }
 
+  for (const phase of flow.phases) {
+    const allowsTestRationale = phase.transition_conditions.some((condition) =>
+      /test[\s_-]*rationale/i.test(condition)
+    );
+    if (allowsTestRationale && !phase.optional_outputs.includes("test_rationale")) {
+      errors.push(`phase ${phase.id} references test rationale but does not declare optional_outputs: [test_rationale]`);
+    }
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors };
   }

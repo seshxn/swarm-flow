@@ -20,11 +20,15 @@ export function createPlaywrightQaBackend(): QaBackend {
       const startedAt = new Date().toISOString();
       await mkdir(request.outputDirectory, { recursive: true });
       const command = request.testCommand ?? "npx playwright test --reporter=json";
-      const execution = await runCommand(command, request.workingDirectory);
+      const execution = await runCommand(command, request.workingDirectory, request.config?.browser.timeoutMs);
       let accessibilityExecution: { exitCode: number; stdout: string; stderr: string } | undefined;
       if (request.config?.accessibility.command) {
         if (execution.exitCode === 0) {
-          accessibilityExecution = await runCommand(request.config.accessibility.command, request.workingDirectory);
+          accessibilityExecution = await runCommand(
+            request.config.accessibility.command,
+            request.workingDirectory,
+            request.config.browser.timeoutMs
+          );
         } else {
           accessibilityExecution = {
             exitCode: 1,
@@ -127,22 +131,57 @@ export function createPlaywrightQaBackend(): QaBackend {
   };
 }
 
-function runCommand(command: string, cwd: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+const maxBufferedOutput = 16_384;
+const defaultCommandTimeoutMs = 30_000;
+
+function runCommand(
+  command: string,
+  cwd: string,
+  timeoutMs = defaultCommandTimeoutMs
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(command, { cwd, shell: true });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    function finish(exitCode: number, finalStderr = stderr): void {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timeout);
+      resolve({ exitCode, stdout, stderr: finalStderr });
+    }
+
     child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
+      stdout = appendBounded(stdout, String(chunk));
     });
     child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
+      stderr = appendBounded(stderr, String(chunk));
     });
     child.on("error", (error) => {
-      resolve({ exitCode: 1, stdout, stderr: error.message });
+      finish(1, appendBounded(stderr, error.message));
     });
     child.on("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+      if (timedOut) {
+        finish(124, appendBounded(stderr, `Command timed out after ${timeoutMs}ms: ${command}`));
+        return;
+      }
+      finish(code ?? 1);
     });
   });
+}
+
+function appendBounded(existing: string, chunk: string): string {
+  const next = existing + chunk;
+  if (next.length <= maxBufferedOutput) {
+    return next;
+  }
+  return next.slice(next.length - maxBufferedOutput);
 }

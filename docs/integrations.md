@@ -148,4 +148,4 @@ See [plugin-distribution.md](plugin-distribution.md) for the publishing checklis
 - External writes stay in preview mode.
 - Human approval must be explicit.
 - Artifacts are durable source of truth.
-- Hooks are represented as specs; automatic hook execution is future work.
+- Hooks are represented as specs and executed by the runtime around phase transitions, with results persisted in run state. Connector actions remain preview-first unless a future policy-gated live adapter explicitly supports them.

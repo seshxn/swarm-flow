@@ -1,6 +1,6 @@
 # MVP Scope
 
-## v0.1 Includes
+## v0.2 Includes
 
 Given a feature idea, swarm-flow should be able to:
 
@@ -17,7 +17,7 @@ Given a feature idea, swarm-flow should be able to:
 - produce review and QA artifacts
 - draft a PR summary and release notes
 
-## v0.1 Excludes
+## v0.2 Excludes
 
 - auto deploy to production
 - autonomous merge to main
