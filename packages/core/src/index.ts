@@ -112,6 +112,29 @@ export type HookExecution = {
   error?: string;
 };
 
+export type RepairLoop = {
+  id: string;
+  status: "open" | "closed";
+  finding: string;
+  owner: string;
+  opened_at: string;
+  closed_at?: string;
+  closing_evidence?: string;
+};
+
+export type AgentDispatchRecord = {
+  id: string;
+  phase_id: string;
+  status: "planned" | "dispatched" | "completed";
+  packets: Array<{
+    agent_role: string;
+    status: "pending" | "dispatched" | "completed";
+    artifacts: string[];
+  }>;
+  created_at: string;
+  updated_at: string;
+};
+
 export type RunState = {
   id: string;
   repo: {
@@ -140,6 +163,8 @@ export type RunState = {
   target?: RunTarget;
   external_comment_previews?: ExternalCommentPreview[];
   external_posting_selections?: ExternalPostingSelection[];
+  repair_loops?: RepairLoop[];
+  agent_dispatches?: AgentDispatchRecord[];
   created_at: string;
   updated_at: string;
 };
@@ -192,6 +217,22 @@ export type Policy = {
 export type PolicyDecision = {
   allowed: boolean;
   reasons: string[];
+};
+
+export type PolicyGateExplanation = {
+  id: string;
+  severity: "blocker" | "warning" | "info";
+  reason: string;
+  remediation: string;
+  waiverEligible: boolean;
+};
+
+export type PolicyExplanation = {
+  allowed: boolean;
+  summary: string;
+  remediations: string[];
+  gates: PolicyGateExplanation[];
+  context?: Record<string, unknown>;
 };
 
 export type ManageablePrPolicy = {
@@ -455,6 +496,71 @@ export function evaluateExternalCommentPosting(input: ExternalCommentPostingEval
     allowed: reasons.length === 0,
     reasons
   };
+}
+
+export function explainPolicyDecision(
+  decision: PolicyDecision,
+  context?: Record<string, unknown>
+): PolicyExplanation {
+  const gates = decision.reasons.map((reason) => explainReason(reason));
+
+  return {
+    allowed: decision.allowed,
+    summary: decision.allowed
+      ? "Allowed by policy."
+      : `Blocked by ${decision.reasons.length} policy gate${decision.reasons.length === 1 ? "" : "s"}.`,
+    remediations: gates.map((gate) => gate.remediation),
+    gates,
+    context
+  };
+}
+
+function explainReason(reason: string): PolicyGateExplanation {
+  const artifactMatch = reason.match(/^(.+) requires artifact (.+)$/);
+  if (artifactMatch) {
+    const artifactId = artifactMatch[2] ?? "artifact";
+    return {
+      id: `missing_artifact:${artifactId}`,
+      severity: "blocker",
+      reason,
+      remediation: `Register the missing artifact: swarm-flow artifact add ${artifactId} <file>`,
+      waiverEligible: false
+    };
+  }
+
+  const approvalMatch = reason.match(/^(.+) requires approval$/);
+  if (approvalMatch) {
+    const phaseId = approvalMatch[1] ?? "phase";
+    return {
+      id: `missing_approval:${phaseId}`,
+      severity: "blocker",
+      reason,
+      remediation: `Record approval: swarm-flow approve ${phaseId}`,
+      waiverEligible: true
+    };
+  }
+
+  if (/preview/i.test(reason)) {
+    return {
+      id: "missing_preview",
+      severity: "blocker",
+      reason,
+      remediation: "Create and select a preview before applying the external write.",
+      waiverEligible: false
+    };
+  }
+
+  return {
+    id: `policy:${slugifyReason(reason)}`,
+    severity: "blocker",
+    reason,
+    remediation: "Resolve the policy blocker or record an explicit approval where policy allows it.",
+    waiverEligible: true
+  };
+}
+
+function slugifyReason(reason: string): string {
+  return reason.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 function findDependencyCycle(phases: Phase[]): string[] | undefined {

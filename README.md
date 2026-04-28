@@ -102,9 +102,14 @@ node packages/cli/dist/index.js context pack
 node packages/cli/dist/index.js agents plan
 node packages/cli/dist/index.js artifact add feature_brief path/to/feature-brief.md
 node packages/cli/dist/index.js policy check
+node packages/cli/dist/index.js policy explain
 node packages/cli/dist/index.js complete intake
 node packages/cli/dist/index.js artifacts
+node packages/cli/dist/index.js artifact validate feature_brief
+node packages/cli/dist/index.js evidence graph
 node packages/cli/dist/index.js preview jira
+node packages/cli/dist/index.js repair open --finding "validation failed" --owner implementer
+node packages/cli/dist/index.js dashboard export
 node packages/cli/dist/index.js runs list
 ```
 
@@ -188,10 +193,16 @@ v0.2 is a CLI-first local orchestration foundation with agent integration, QA ar
 - persisted hook execution records
 - connector preview recording
 - preview-safe connector contracts
+- artifact quality validation
+- evidence graph export
+- policy explain remediation output
+- managed subagent dispatch state
+- first-class repair loop records
+- static local run dashboard export
 - CLI inspection commands
 - docs, flows, skills, hooks, policies, schemas, and examples
 
-Live Jira, Confluence, GitHub, and CI writes are intentionally not enabled yet. Starter connectors are safe preview implementations that define the contract for future live adapters.
+Live Jira, Confluence, GitHub, and CI writes are intentionally not enabled yet. Starter connectors are safe preview implementations that define the contract for future live adapters. The approved apply path is currently limited to repository-confined filesystem previews.
 
 ## Core Concepts
 

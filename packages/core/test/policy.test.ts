@@ -3,6 +3,7 @@ import {
   evaluateExternalCommentPosting,
   evaluateExternalWrite,
   evaluatePhaseEntry,
+  explainPolicyDecision,
   evaluatePrSize,
   type ManageablePrPolicy,
   type PrSizeInput
@@ -113,5 +114,49 @@ describe("policy evaluation", () => {
         autoPostRequested: false
       }).allowed
     ).toBe(true);
+  });
+
+  it("explains blocked policy decisions with actionable remediation", () => {
+    const decision = evaluatePhaseEntry({
+      policy: {
+        id: "default",
+        phase_entry_requires_artifacts: {
+          implementation: ["acceptance_criteria"]
+        },
+        approval_required_phases: ["implementation"]
+      },
+      phaseId: "implementation",
+      artifacts: new Set(),
+      approvals: new Set()
+    });
+
+    expect(explainPolicyDecision(decision, { command: "complete", phaseId: "implementation" })).toEqual({
+      allowed: false,
+      summary: "Blocked by 2 policy gates.",
+      remediations: [
+        "Register the missing artifact: swarm-flow artifact add acceptance_criteria <file>",
+        "Record approval: swarm-flow approve implementation"
+      ],
+      gates: [
+        {
+          id: "missing_artifact:acceptance_criteria",
+          severity: "blocker",
+          reason: "implementation requires artifact acceptance_criteria",
+          remediation: "Register the missing artifact: swarm-flow artifact add acceptance_criteria <file>",
+          waiverEligible: false
+        },
+        {
+          id: "missing_approval:implementation",
+          severity: "blocker",
+          reason: "implementation requires approval",
+          remediation: "Record approval: swarm-flow approve implementation",
+          waiverEligible: true
+        }
+      ],
+      context: {
+        command: "complete",
+        phaseId: "implementation"
+      }
+    });
   });
 });

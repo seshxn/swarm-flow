@@ -235,7 +235,7 @@ function createPreviewConnector(options: PreviewConnectorOptions): Connector {
 
 function enforcePreview(connector: string, preview: boolean): void {
   if (!preview) {
-    throw new Error(`${connector} connector only supports preview writes in v0.1`);
+    throw new Error(`${connector} connector only supports preview writes unless a governed apply adapter is enabled`);
   }
 }
 
