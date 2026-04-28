@@ -7,6 +7,7 @@ import type {
   ExternalPostingSelection,
   Flow,
   HookExecution,
+  RepairLoop,
   RunLogEntry,
   RunScope,
   RunTarget,
@@ -95,6 +96,52 @@ export type PhaseGateEvaluation = {
   stage: PhaseGateStage;
   checked_conditions: string[];
   informational_conditions: string[];
+};
+
+export type ArtifactValidationInput = {
+  artifactId: string;
+  content: string;
+  expectation?: string;
+  requireCitations?: boolean;
+};
+
+export type ArtifactValidationResult = {
+  artifactId: string;
+  ok: boolean;
+  score: number;
+  findings: string[];
+  expectation?: string;
+};
+
+export type EvidenceGraphNode = {
+  id: string;
+  type: "run" | "phase" | "artifact" | "approval" | "policy_decision" | "connector_preview" | "repair_loop";
+  label: string;
+  data?: Record<string, unknown>;
+};
+
+export type EvidenceGraphEdge = {
+  from: string;
+  to: string;
+  label: string;
+};
+
+export type EvidenceGraph = {
+  runId: string;
+  nodes: EvidenceGraphNode[];
+  edges: EvidenceGraphEdge[];
+};
+
+export type OpenRepairLoopInput = {
+  finding: string;
+  owner: string;
+  now?: Date;
+};
+
+export type CloseRepairLoopInput = {
+  repairId: string;
+  evidence: string;
+  now?: Date;
 };
 
 export class FileRunStore {
@@ -346,6 +393,8 @@ export class FlowRuntime {
       target: input.target,
       external_comment_previews: [],
       external_posting_selections: [],
+      repair_loops: [],
+      agent_dispatches: [],
       created_at: timestamp,
       updated_at: timestamp
     };
@@ -495,6 +544,71 @@ export class FlowRuntime {
     return updated;
   }
 
+  async openRepairLoop(runId: string, input: OpenRepairLoopInput): Promise<RunState> {
+    const run = await this.store.load(runId);
+    const now = input.now ?? new Date();
+    const timestamp = now.toISOString();
+    const nextNumber = (run.repair_loops ?? []).length + 1;
+    const repair: RepairLoop = {
+      id: `repair-${nextNumber}`,
+      status: "open",
+      finding: input.finding,
+      owner: input.owner,
+      opened_at: timestamp
+    };
+    const updated: RunState = {
+      ...run,
+      repair_loops: [...(run.repair_loops ?? []), repair],
+      logs: [
+        ...run.logs,
+        logEntry(timestamp, "warn", "Repair loop opened", {
+          repair_id: repair.id,
+          owner: repair.owner
+        })
+      ],
+      updated_at: timestamp
+    };
+
+    await this.store.save(updated);
+    return updated;
+  }
+
+  async closeRepairLoop(runId: string, input: CloseRepairLoopInput): Promise<RunState> {
+    const run = await this.store.load(runId);
+    const now = input.now ?? new Date();
+    const timestamp = now.toISOString();
+    const loops = run.repair_loops ?? [];
+    const target = loops.find((loop) => loop.id === input.repairId);
+    if (!target) {
+      throw new Error(`Repair loop ${input.repairId} not found`);
+    }
+
+    const updatedLoops = loops.map((loop) =>
+      loop.id === input.repairId
+        ? {
+            ...loop,
+            status: "closed" as const,
+            closed_at: timestamp,
+            closing_evidence: input.evidence
+          }
+        : loop
+    );
+    const updated: RunState = {
+      ...run,
+      repair_loops: updatedLoops,
+      logs: [
+        ...run.logs,
+        logEntry(timestamp, "info", "Repair loop closed", {
+          repair_id: input.repairId
+        })
+      ],
+      updated_at: timestamp
+    };
+
+    await this.store.save(updated);
+    return updated;
+  }
+
   async completePhase(runId: string, phaseId: string, outputArtifactIds: string[]): Promise<RunState> {
     const run = await this.store.load(runId);
     const phase = run.flow_snapshot.phases.find((candidate) => candidate.id === run.current_phase);
@@ -568,6 +682,149 @@ export class FlowRuntime {
     await this.store.save(updated);
     return updated;
   }
+}
+
+export function validateArtifactContent(input: ArtifactValidationInput): ArtifactValidationResult {
+  const findings: string[] = [];
+  let score = 100;
+  const trimmed = input.content.trim();
+
+  if (trimmed.length < 120) {
+    findings.push(`${input.artifactId} is shorter than the minimum useful artifact length`);
+    score -= 35;
+  }
+
+  if (!/^#\s+/m.test(trimmed)) {
+    findings.push(`${input.artifactId} should start with a markdown heading`);
+    score -= 15;
+  }
+
+  if (input.expectation) {
+    const expectationTerms = input.expectation
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/)
+      .filter((term) => term.length > 4);
+    const content = trimmed.toLowerCase();
+    const matched = expectationTerms.filter((term) => content.includes(term));
+    if (expectationTerms.length > 0 && matched.length === 0 && !hasCitation(trimmed)) {
+      findings.push(`${input.artifactId} does not address its output expectation`);
+      score -= 20;
+    }
+  }
+
+  if (input.requireCitations && !hasCitation(trimmed)) {
+    findings.push(`${input.artifactId} requires at least one file, command, URL, or ticket citation`);
+    score -= 30;
+  }
+
+  return {
+    artifactId: input.artifactId,
+    ok: findings.length === 0,
+    score: Math.max(0, score),
+    findings,
+    ...(input.expectation ? { expectation: input.expectation } : {})
+  };
+}
+
+export function buildEvidenceGraph(run: RunState): EvidenceGraph {
+  const nodes: EvidenceGraphNode[] = [
+    {
+      id: `run:${run.id}`,
+      type: "run",
+      label: run.feature.title,
+      data: {
+        flow_id: run.flow_id,
+        current_phase: run.current_phase
+      }
+    }
+  ];
+  const edges: EvidenceGraphEdge[] = [];
+
+  for (const phase of run.flow_snapshot.phases) {
+    nodes.push({
+      id: `phase:${phase.id}`,
+      type: "phase",
+      label: phase.description,
+      data: {
+        required_outputs: phase.required_outputs
+      }
+    });
+    edges.push({ from: `run:${run.id}`, to: `phase:${phase.id}`, label: "has_phase" });
+  }
+
+  for (const artifact of Object.values(run.artifact_registry)) {
+    nodes.push({
+      id: `artifact:${artifact.id}`,
+      type: "artifact",
+      label: artifact.id,
+      data: {
+        path: artifact.path,
+        media_type: artifact.media_type
+      }
+    });
+    edges.push({ from: `run:${run.id}`, to: `artifact:${artifact.id}`, label: "contains" });
+    edges.push({ from: `phase:${artifact.produced_by_phase}`, to: `artifact:${artifact.id}`, label: "produced" });
+  }
+
+  for (const [phaseId, approval] of Object.entries(run.approvals)) {
+    nodes.push({
+      id: `approval:${phaseId}`,
+      type: "approval",
+      label: `Approval for ${phaseId}`,
+      data: {
+        approved_by: approval.approved_by,
+        approved_at: approval.approved_at
+      }
+    });
+    edges.push({ from: `approval:${phaseId}`, to: `phase:${phaseId}`, label: "approves" });
+  }
+
+  run.policy_decisions.forEach((decision, index) => {
+    nodes.push({
+      id: `policy:${index + 1}`,
+      type: "policy_decision",
+      label: decision.allowed ? "Policy allowed" : "Policy blocked",
+      data: {
+        reasons: decision.reasons
+      }
+    });
+    edges.push({ from: `run:${run.id}`, to: `policy:${index + 1}`, label: "records" });
+  });
+
+  run.connector_write_previews.forEach((preview, index) => {
+    nodes.push({
+      id: `preview:${index + 1}`,
+      type: "connector_preview",
+      label: `${preview.connector_id} ${preview.operation}`,
+      data: {
+        target: preview.target,
+        preview_path: preview.preview_path
+      }
+    });
+    edges.push({ from: `run:${run.id}`, to: `preview:${index + 1}`, label: "previews" });
+  });
+
+  (run.repair_loops ?? []).forEach((repair) => {
+    nodes.push({
+      id: `repair:${repair.id}`,
+      type: "repair_loop",
+      label: repair.finding,
+      data: {
+        status: repair.status,
+        owner: repair.owner
+      }
+    });
+    edges.push({ from: `run:${run.id}`, to: `repair:${repair.id}`, label: "tracks" });
+  });
+
+  return { runId: run.id, nodes, edges };
+}
+
+function hasCitation(content: string): boolean {
+  return /`[^`]+\.(ts|tsx|js|jsx|md|json|yaml|yml)`/.test(content) ||
+    /`(?:npm|node|git|swarm-flow|rtk)\s+[^`]+`/.test(content) ||
+    /https?:\/\//.test(content) ||
+    /\b[A-Z][A-Z0-9]+-\d+\b/.test(content);
 }
 
 function assertHooksPassed(results: HookExecution[]): void {

@@ -40,3 +40,18 @@
 - policies
 - dry-run and audit logs
 - strict modes
+
+## Milestone 6: Evidence and Repair Orchestration
+
+- artifact quality validation against phase expectations
+- evidence graph linking runs, phases, artifacts, approvals, policy decisions, previews, and repairs
+- policy explain output with remediation commands
+- managed subagent dispatch lifecycle state
+- first-class validation repair loops
+
+## Milestone 7: Governed Apply and Operator UI
+
+- approved filesystem preview apply inside the repository boundary
+- live external connectors only after preview, idempotency, and explicit approval
+- static local run dashboard for operators
+- future hosted dashboard and richer connector-specific rollback metadata

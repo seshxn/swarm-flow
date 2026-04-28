@@ -214,6 +214,89 @@ describe("CLI", () => {
     expect(output.join("\n")).toContain("Skill lint passed");
   });
 
+  it("explains policy blockers with remediation commands", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const flowPath = join(workspace, "flow.yaml");
+    await writeFile(
+      flowPath,
+      [
+        "id: feature-default",
+        "name: Feature Delivery",
+        "phases:",
+        "  - id: intake",
+        "    description: Normalize",
+        "    agents: [pm]",
+        "    required_outputs: [feature_brief]",
+        "  - id: planning",
+        "    description: Plan",
+        "    agents: [pm]",
+        "    required_outputs: [acceptance_criteria]",
+        "    dependencies: [intake]",
+        "    approval_required: true"
+      ].join("\n"),
+      "utf8"
+    );
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "start",
+      "feature",
+      "--title",
+      "Explain gates",
+      "--goal",
+      "Explain blocked phase entry",
+      "--flow",
+      flowPath
+    ]);
+    await program.parseAsync(["node", "swarm-flow", "policy", "explain", "--phase", "planning"]);
+
+    expect(output.join("\n")).toContain("Blocked by");
+    expect(output.join("\n")).toContain("swarm-flow approve planning");
+  });
+
+  it("validates artifacts and writes an evidence graph", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    await writeFile(
+      join(workspace, "discovery-report.md"),
+      [
+        "# Discovery",
+        "",
+        "- Reviewed `packages/runtime/src/index.ts` for run gates.",
+        "- Ran `npm test` as baseline evidence.",
+        "- Risk: live connector apply needs approval."
+      ].join("\n"),
+      "utf8"
+    );
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Plan artifact validation"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "artifact", "add", "discovery_report", "discovery-report.md", "--phase", "discovery"]);
+    await program.parseAsync(["node", "swarm-flow", "artifact", "validate", "discovery_report"]);
+    await program.parseAsync(["node", "swarm-flow", "evidence", "graph"]);
+
+    const validation = JSON.parse(
+      await readFile(join(workspace, ".runs", runId, "decisions", "artifact-validation-discovery_report.json"), "utf8")
+    );
+    const graph = JSON.parse(await readFile(join(workspace, ".runs", runId, "context", "evidence-graph.json"), "utf8"));
+    expect(validation).toMatchObject({ artifactId: "discovery_report", ok: true });
+    expect(graph.nodes).toEqual(expect.arrayContaining([expect.objectContaining({ id: "artifact:discovery_report" })]));
+    expect(output.join("\n")).toContain("Artifact discovery_report passed validation");
+    expect(output.join("\n")).toContain("Evidence graph written:");
+  });
+
   it("writes a host-neutral subagent dispatch plan and context pack", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const output: string[] = [];
@@ -243,6 +326,37 @@ describe("CLI", () => {
     });
     expect(context).toContain("Current phase: `intake`");
     expect(output.join("\n")).toContain("Subagent dispatch manifest written:");
+  });
+
+  it("records managed subagent dispatch lifecycle state", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Plan specialist work"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "agents", "plan"]);
+    await program.parseAsync(["node", "swarm-flow", "agents", "dispatch"]);
+    await program.parseAsync(["node", "swarm-flow", "agents", "collect", "--agent", "pm", "--artifact", "feature_brief"]);
+
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.agent_dispatches[0]).toMatchObject({
+      phase_id: "intake",
+      status: "completed",
+      packets: [
+        expect.objectContaining({
+          agent_role: "pm",
+          status: "completed",
+          artifacts: ["feature_brief"]
+        })
+      ]
+    });
+    expect(output.join("\n")).toContain("Dispatched 1 subagent packet(s)");
+    expect(output.join("\n")).toContain("Collected artifacts from pm");
   });
 
   it("records red and green TDD evidence through CLI commands", async () => {
@@ -772,6 +886,43 @@ describe("CLI", () => {
     expect(output.join("\n")).toContain("Comment selection recorded");
   });
 
+  it("opens and closes repair loops linked to validation findings", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Fix validation blocker"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "repair",
+      "open",
+      "--finding",
+      "validation_status failed: npm test exited 1",
+      "--owner",
+      "implementer"
+    ]);
+    await program.parseAsync(["node", "swarm-flow", "repair", "close", "repair-1", "--evidence", "npm test passed"]);
+
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.repair_loops).toEqual([
+      expect.objectContaining({
+        id: "repair-1",
+        status: "closed",
+        finding: "validation_status failed: npm test exited 1",
+        owner: "implementer",
+        closing_evidence: "npm test passed"
+      })
+    ]);
+    expect(output.join("\n")).toContain("Opened repair loop repair-1");
+    expect(output.join("\n")).toContain("Closed repair loop repair-1");
+  });
+
   it("records failed auto agent executions for auditability", async () => {
     workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
     const output: string[] = [];
@@ -863,5 +1014,77 @@ describe("CLI", () => {
       }
     });
     await expect(readFile(join(workspace, "should-not-exist.txt"), "utf8")).rejects.toThrow();
+  });
+
+  it("applies approved filesystem previews inside the repository and records the write", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Apply a governed filesystem preview"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "preview", "filesystem"]);
+    const previewPath = join(workspace, ".runs", runId, "outputs", "previews", "filesystem.preview.json");
+    await writeFile(
+      previewPath,
+      JSON.stringify(
+        {
+          runId,
+          target: "filesystem",
+          mode: "preview",
+          operation: "create",
+          idempotencyKey: `${runId}:filesystem:preview`,
+          payload: {
+            path: "outputs/applied.txt",
+            content: "approved live write"
+          }
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+    await program.parseAsync([
+      "node",
+      "swarm-flow",
+      "apply",
+      "filesystem",
+      ".runs/" + runId + "/outputs/previews/filesystem.preview.json",
+      "--approve"
+    ]);
+
+    await expect(readFile(join(workspace, "outputs", "applied.txt"), "utf8")).resolves.toBe("approved live write");
+    const runState = JSON.parse(await readFile(join(workspace, ".runs", runId, "run.json"), "utf8"));
+    expect(runState.tool_writes[0]).toMatchObject({
+      connector_id: "filesystem",
+      operation: "create",
+      target: "outputs/applied.txt",
+      idempotency_key: `${runId}:filesystem:preview`
+    });
+    expect(output.join("\n")).toContain("Applied filesystem preview");
+  });
+
+  it("exports a local run dashboard", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-cli-"));
+    const output: string[] = [];
+    const program = createProgram({
+      cwd: workspace,
+      stdout: (line) => output.push(line),
+      stderr: (line) => output.push(line)
+    });
+
+    await program.parseAsync(["node", "swarm-flow", "start", "Inspect the governed run"]);
+    const runId = output.find((line) => line.startsWith("Started "))?.replace("Started ", "") ?? "missing";
+    await program.parseAsync(["node", "swarm-flow", "dashboard", "export"]);
+
+    const html = await readFile(join(workspace, ".runs", runId, "dashboard.html"), "utf8");
+    expect(html).toContain("swarm-flow run dashboard");
+    expect(html).toContain("Inspect the governed run");
+    expect(html).toContain("intake");
+    expect(output.join("\n")).toContain("Dashboard written:");
   });
 });

@@ -45,6 +45,8 @@ flowchart LR
 5. Phase completion checks required outputs.
 6. Policies evaluate phase entry and external writes.
 7. Hooks and connectors add automation around transitions.
+8. Artifact validators and evidence graphs make phase evidence inspectable.
+9. Repair loops track failed validation back to implementation evidence before delivery resumes.
 
 ## Storage
 
@@ -62,3 +64,13 @@ v0.2 uses a file-backed store:
 ```
 
 This keeps runs inspectable with standard developer tools and makes resumability explicit.
+
+## Operator Surfaces
+
+The CLI now exposes three inspection layers:
+
+- `swarm-flow policy explain` renders blocked gates with concrete remediation commands.
+- `swarm-flow evidence graph` writes `.runs/<run-id>/context/evidence-graph.json`.
+- `swarm-flow dashboard export` writes a local static dashboard at `.runs/<run-id>/dashboard.html`.
+
+Live writes remain governed. The first approved apply path is filesystem-only and confined to the repository root; other connectors remain preview-first until adapter-specific policy and rollback behavior exists.

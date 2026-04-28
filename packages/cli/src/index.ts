@@ -5,7 +5,13 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { parse } from "yaml";
-import { FileRunStore, FlowRuntime, type TddEvidenceArtifact } from "@swarm-flow/runtime";
+import {
+  buildEvidenceGraph,
+  FileRunStore,
+  FlowRuntime,
+  validateArtifactContent,
+  type TddEvidenceArtifact
+} from "@swarm-flow/runtime";
 import {
   createPlaywrightQaBackend,
   normalizeQaConfig,
@@ -13,7 +19,15 @@ import {
   type NormalizeQaConfigInput,
   type QaBackendId
 } from "@swarm-flow/qa";
-import { evaluatePhaseEntry, validateFlow, type Policy, type RunScope, type RunState, type RunTarget } from "@swarm-flow/core";
+import {
+  evaluatePhaseEntry,
+  explainPolicyDecision,
+  validateFlow,
+  type Policy,
+  type RunScope,
+  type RunState,
+  type RunTarget
+} from "@swarm-flow/core";
 import { createLocalSubagentDispatchManifest, StandardAgentAdapter } from "@swarm-flow/adapters";
 
 export type CliIo = {
@@ -27,6 +41,10 @@ type StartOptions = {
   goal?: string;
   flow?: string;
   target?: string;
+};
+
+type ApplyOptions = {
+  approve?: boolean;
 };
 
 type StartKind = "feature" | "bugfix" | "refactor" | "spike" | "incident" | "epic" | "review" | "qa";
@@ -55,6 +73,11 @@ type ArtifactAddOptions = {
   mediaType?: string;
 };
 
+type ArtifactValidateOptions = {
+  run?: string;
+  requireCitations?: boolean;
+};
+
 type CompleteOptions = {
   run?: string;
   outputs?: string;
@@ -63,6 +86,12 @@ type CompleteOptions = {
 
 type PolicyCheckOptions = {
   run?: string;
+  policy?: string;
+};
+
+type PolicyExplainOptions = {
+  run?: string;
+  phase?: string;
   policy?: string;
 };
 
@@ -88,6 +117,17 @@ type TddEvidenceOptions = {
 type TddStatusOptions = {
   run?: string;
   artifact?: string;
+};
+
+type RepairOpenOptions = {
+  run?: string;
+  finding: string;
+  owner?: string;
+};
+
+type RepairCloseOptions = {
+  run?: string;
+  evidence: string;
 };
 
 type QaOptions = {
@@ -138,7 +178,7 @@ export function createProgram(io: CliIo = {}): Command {
   program
     .name("swarm-flow")
     .description("Governed, artifact-driven SDLC orchestration for AI coding agents.")
-    .version("0.1.0")
+    .version("0.2.0")
     .exitOverride();
 
   program
@@ -208,8 +248,9 @@ export function createProgram(io: CliIo = {}): Command {
     .command("apply")
     .argument("<connector>", "Connector ID (e.g. filesystem, git, github)")
     .argument("<preview_file>", "Path to the preview JSON payload")
-    .description("Validate a connector preview file; live apply is disabled in v0.1")
-    .action(async (connector: string, previewFile: string) => {
+    .option("--approve", "apply an approved preview when the connector supports governed live writes")
+    .description("Apply an approved connector preview when policy and connector support it.")
+    .action(async (connector: string, previewFile: string, options: ApplyOptions) => {
       const store = new FileRunStore(cwd);
       const run = await store.latest();
       if (!run) {
@@ -219,8 +260,43 @@ export function createProgram(io: CliIo = {}): Command {
       const rawPreview = await readFile(resolve(cwd, previewFile), "utf8");
       const previewPayload = JSON.parse(rawPreview);
       const reasons = validateApplyPreview(run, connector, previewPayload);
+      if (options.approve && connector === "filesystem" && reasons.length === 0) {
+        const write = await applyFilesystemPreview(cwd, previewPayload);
+        const current = await store.load(run.id);
+        const timestamp = new Date().toISOString();
+        await store.save({
+          ...current,
+          tool_writes: [
+            ...current.tool_writes,
+            {
+              connector_id: "filesystem",
+              operation: write.operation,
+              target: write.target,
+              idempotency_key: write.idempotencyKey,
+              applied_at: timestamp
+            }
+          ],
+          logs: [
+            ...current.logs,
+            {
+              at: timestamp,
+              level: "info",
+              message: "Connector preview applied",
+              data: {
+                connector_id: "filesystem",
+                target: write.target
+              }
+            }
+          ],
+          updated_at: timestamp
+        });
+        stdout(`Applied filesystem preview: ${write.target}`);
+        return;
+      }
       const message = [
-        "Live connector apply is not supported in v0.2. Keep writes in preview mode and record user selections instead.",
+        options.approve
+          ? `Live connector apply is not supported for ${connector}.`
+          : "Live connector apply is not supported without --approve and a supported preview-safe connector.",
         ...reasons
       ].join(" ");
       await recordPolicyDecision(store, run, {
@@ -519,6 +595,39 @@ export function createProgram(io: CliIo = {}): Command {
       stdout(`Registered artifact ${id}: ${updated.artifact_registry[id].path}`);
     });
 
+  artifact
+    .command("validate")
+    .argument("<id>", "registered artifact id to validate")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--require-citations", "require evidence citations even when the phase expectation does not mention them")
+    .description("Validate artifact content quality against the phase output expectation.")
+    .action(async (id: string, options: ArtifactValidateOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const entry = run.artifact_registry[id];
+      if (!entry) {
+        throw new Error(`Artifact ${id} is not registered`);
+      }
+      const phase = run.flow_snapshot.phases.find((candidate) => candidate.id === entry.produced_by_phase);
+      const content = await readFile(resolve(cwd, ".runs", run.id, entry.path), "utf8");
+      const expectation = phase?.output_expectations?.[id];
+      const requiresCitations =
+        Boolean(options.requireCitations) || /cite|evidence|source|file|command|ticket/i.test(expectation ?? "");
+      const result = validateArtifactContent({
+        artifactId: id,
+        content,
+        expectation,
+        requireCitations: requiresCitations
+      });
+      const decisionPath = resolve(cwd, ".runs", run.id, "decisions", `artifact-validation-${id}.json`);
+      await mkdir(dirname(decisionPath), { recursive: true });
+      await writeFile(decisionPath, `${JSON.stringify(result, null, 2)}\n`, "utf8");
+      if (!result.ok) {
+        throw new Error(`Artifact ${id} failed validation: ${result.findings.join("; ")}`);
+      }
+      stdout(`Artifact ${id} passed validation with score ${result.score}`);
+    });
+
   program
     .command("phase")
     .option("--run <id>", "run id; defaults to most recent run")
@@ -602,6 +711,30 @@ export function createProgram(io: CliIo = {}): Command {
       stdout(`Policy check passed for ${run.current_phase}`);
     });
 
+  policyCommand
+    .command("explain")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--phase <phase>", "phase id to evaluate; defaults to current phase")
+    .option("--policy <id>", "policy id or path; defaults to configured policy when available")
+    .description("Explain policy gate status with remediation commands.")
+    .action(async (options: PolicyExplainOptions) => {
+      const run = await loadRun(new FileRunStore(cwd), options.run);
+      const phaseId = options.phase ?? run.current_phase;
+      const decision = await evaluatePhaseGate(cwd, run, phaseId, options.policy);
+      const explanation = explainPolicyDecision(decision, {
+        command: "policy explain",
+        phaseId
+      });
+      stdout(explanation.summary);
+      for (const gate of explanation.gates) {
+        stdout(`- ${gate.id}: ${gate.reason}`);
+        stdout(`  Remediation: ${gate.remediation}`);
+      }
+      if (explanation.allowed) {
+        stdout(`Policy allows ${phaseId}`);
+      }
+    });
+
   const contextCommand = program.command("context").description("Create compact agent context packs.");
   contextCommand
     .command("pack")
@@ -618,6 +751,23 @@ export function createProgram(io: CliIo = {}): Command {
       await mkdir(dirname(outputPath), { recursive: true });
       await writeFile(outputPath, content, "utf8");
       stdout(`Context pack written: ${outputPath}`);
+    });
+
+  const evidenceCommand = program.command("evidence").description("Inspect evidence relationships for a run.");
+  evidenceCommand
+    .command("graph")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--output <path>", "output path; defaults to the run context directory")
+    .description("Write a graph of run phases, artifacts, approvals, policy decisions, previews, and repairs.")
+    .action(async (options: ContextPackOptions) => {
+      const run = await loadRun(new FileRunStore(cwd), options.run);
+      const graph = buildEvidenceGraph(run);
+      const outputPath = options.output
+        ? resolve(cwd, options.output)
+        : resolve(cwd, ".runs", run.id, "context", "evidence-graph.json");
+      await mkdir(dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, `${JSON.stringify(graph, null, 2)}\n`, "utf8");
+      stdout(`Evidence graph written: ${outputPath}`);
     });
 
   const agentsCommand = program.command("agents").description("Plan host-neutral specialist agent dispatch.");
@@ -663,6 +813,78 @@ export function createProgram(io: CliIo = {}): Command {
       await writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
       stdout(`Subagent dispatch manifest written: ${outputPath}`);
       stdout(`Context pack written: ${contextPath}`);
+    });
+
+  agentsCommand
+    .command("dispatch")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Record managed dispatch state from the current subagent manifest.")
+    .action(async (options: { run?: string }) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const manifestPath = resolve(cwd, ".runs", run.id, "context", "subagent-dispatch.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+        phaseId: string;
+        taskPackets: Array<{ agentRole: string }>;
+      };
+      const timestamp = new Date().toISOString();
+      const dispatch = {
+        id: `dispatch-${(run.agent_dispatches ?? []).length + 1}`,
+        phase_id: manifest.phaseId,
+        status: "dispatched" as const,
+        packets: manifest.taskPackets.map((packet) => ({
+          agent_role: packet.agentRole,
+          status: "dispatched" as const,
+          artifacts: []
+        })),
+        created_at: timestamp,
+        updated_at: timestamp
+      };
+      await store.save({
+        ...run,
+        agent_dispatches: [...(run.agent_dispatches ?? []), dispatch],
+        updated_at: timestamp
+      });
+      stdout(`Dispatched ${dispatch.packets.length} subagent packet(s)`);
+    });
+
+  agentsCommand
+    .command("collect")
+    .requiredOption("--agent <role>", "agent role to collect from")
+    .requiredOption("--artifact <id>", "artifact id produced by the agent")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Record artifact collection for a managed subagent dispatch.")
+    .action(async (options: { run?: string; agent: string; artifact: string }) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const dispatches = [...(run.agent_dispatches ?? [])];
+      const dispatch = dispatches.at(-1);
+      if (!dispatch) {
+        throw new Error("No agent dispatch found. Run swarm-flow agents dispatch first.");
+      }
+      const timestamp = new Date().toISOString();
+      const updatedPackets = dispatch.packets.map((packet) =>
+        packet.agent_role === options.agent
+          ? {
+              ...packet,
+              status: "completed" as const,
+              artifacts: [...new Set([...packet.artifacts, options.artifact])]
+            }
+          : packet
+      );
+      const updatedDispatch = {
+        ...dispatch,
+        packets: updatedPackets,
+        status: updatedPackets.every((packet) => packet.status === "completed") ? "completed" as const : "dispatched" as const,
+        updated_at: timestamp
+      };
+      dispatches[dispatches.length - 1] = updatedDispatch;
+      await store.save({
+        ...run,
+        agent_dispatches: dispatches,
+        updated_at: timestamp
+      });
+      stdout(`Collected artifacts from ${options.agent}`);
     });
 
   const tdd = program.command("tdd").description("Record red/green test-first evidence for implementation artifacts.");
@@ -964,6 +1186,56 @@ export function createProgram(io: CliIo = {}): Command {
       stdout(`Comment selection recorded for ${run.id}`);
     });
 
+  const repair = program.command("repair").description("Open and close validation repair loops.");
+  repair
+    .command("open")
+    .requiredOption("--finding <finding>", "validation finding or blocker that needs repair")
+    .option("--owner <owner>", "responsible role", "implementer")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Open a repair loop linked to a validation finding.")
+    .action(async (options: RepairOpenOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      const updated = await new FlowRuntime({ repoRoot: cwd, store }).openRepairLoop(run.id, {
+        finding: options.finding,
+        owner: options.owner ?? "implementer"
+      });
+      const opened = updated.repair_loops?.at(-1);
+      stdout(`Opened repair loop ${opened?.id ?? "unknown"}`);
+    });
+
+  repair
+    .command("close")
+    .argument("<id>", "repair loop id")
+    .requiredOption("--evidence <evidence>", "evidence that closes the repair loop")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .description("Close a repair loop after validation evidence is available.")
+    .action(async (id: string, options: RepairCloseOptions) => {
+      const store = new FileRunStore(cwd);
+      const run = await loadRun(store, options.run);
+      await new FlowRuntime({ repoRoot: cwd, store }).closeRepairLoop(run.id, {
+        repairId: id,
+        evidence: options.evidence
+      });
+      stdout(`Closed repair loop ${id}`);
+    });
+
+  const dashboard = program.command("dashboard").description("Export a local HTML dashboard for a run.");
+  dashboard
+    .command("export")
+    .option("--run <id>", "run id; defaults to most recent run")
+    .option("--output <path>", "output path; defaults to .runs/<run-id>/dashboard.html")
+    .description("Write a static run dashboard with phases, gates, artifacts, previews, and repairs.")
+    .action(async (options: ContextPackOptions) => {
+      const run = await loadRun(new FileRunStore(cwd), options.run);
+      const outputPath = options.output
+        ? resolve(cwd, options.output)
+        : resolve(cwd, ".runs", run.id, "dashboard.html");
+      await mkdir(dirname(outputPath), { recursive: true });
+      await writeFile(outputPath, renderDashboardHtml(run), "utf8");
+      stdout(`Dashboard written: ${outputPath}`);
+    });
+
   program
     .command("doctor")
     .description("Check local workspace prerequisites.")
@@ -1093,6 +1365,36 @@ function validateApplyPreview(run: RunState, connector: string, previewPayload: 
   }
 
   return reasons;
+}
+
+async function applyFilesystemPreview(
+  cwd: string,
+  previewPayload: unknown
+): Promise<{ operation: "create" | "update"; target: string; idempotencyKey: string }> {
+  if (!isRecord(previewPayload) || !isRecord(previewPayload.payload)) {
+    throw new Error("Filesystem preview payload must include a payload object.");
+  }
+
+  const target = stringValue(previewPayload.payload.path);
+  const content = stringValue(previewPayload.payload.content);
+  const operation = stringValue(previewPayload.operation) === "update" ? "update" : "create";
+  const idempotencyKey =
+    stringValue(previewPayload.idempotencyKey) ?? stringValue(previewPayload.idempotency_key) ?? "missing";
+  if (!target) {
+    throw new Error("Filesystem preview payload requires payload.path.");
+  }
+  if (content === undefined) {
+    throw new Error("Filesystem preview payload requires payload.content.");
+  }
+
+  const absoluteTarget = resolve(cwd, target);
+  if (!absoluteTarget.startsWith(`${cwd}/`) && absoluteTarget !== cwd) {
+    throw new Error("Filesystem preview target escapes repository root.");
+  }
+
+  await mkdir(dirname(absoluteTarget), { recursive: true });
+  await writeFile(absoluteTarget, content, "utf8");
+  return { operation, target, idempotencyKey };
 }
 
 type TddEvidencePatch = Pick<TddEvidenceArtifact, "red" | "green">;
@@ -1356,6 +1658,65 @@ async function renderContextPack(run: RunState): Promise<string> {
     "- Do not advance the phase until required artifacts are registered and policy gates pass.",
     ""
   ].join("\n");
+}
+
+function renderDashboardHtml(run: RunState): string {
+  const phases = run.flow_snapshot.phases
+    .map((phase) => {
+      const state = run.completed_phases.includes(phase.id)
+        ? "completed"
+        : phase.id === run.current_phase
+          ? "current"
+          : "pending";
+      return `<li><strong>${escapeHtml(phase.id)}</strong> <span>${escapeHtml(state)}</span><p>${escapeHtml(phase.description)}</p></li>`;
+    })
+    .join("\n");
+  const artifacts = Object.values(run.artifact_registry)
+    .map((artifact) => `<li>${escapeHtml(artifact.id)} -> <code>${escapeHtml(artifact.path)}</code></li>`)
+    .join("\n") || "<li>none</li>";
+  const approvals = Object.keys(run.approvals)
+    .map((phaseId) => `<li>${escapeHtml(phaseId)}</li>`)
+    .join("\n") || "<li>none</li>";
+  const repairs = (run.repair_loops ?? [])
+    .map((repair) => `<li>${escapeHtml(repair.id)}: ${escapeHtml(repair.status)} - ${escapeHtml(repair.finding)}</li>`)
+    .join("\n") || "<li>none</li>";
+
+  return [
+    "<!doctype html>",
+    '<html lang="en">',
+    "<head>",
+    '<meta charset="utf-8">',
+    "<title>swarm-flow run dashboard</title>",
+    "<style>body{font-family:system-ui,sans-serif;margin:32px;line-height:1.45;color:#17202a}section{margin:24px 0}code{background:#eef2f7;padding:2px 5px;border-radius:4px}li{margin:8px 0}</style>",
+    "</head>",
+    "<body>",
+    "<h1>swarm-flow run dashboard</h1>",
+    `<p><strong>${escapeHtml(run.feature.title)}</strong></p>`,
+    `<p>Run <code>${escapeHtml(run.id)}</code> is on phase <code>${escapeHtml(run.current_phase)}</code>.</p>`,
+    "<section><h2>Phases</h2><ol>",
+    phases,
+    "</ol></section>",
+    "<section><h2>Artifacts</h2><ul>",
+    artifacts,
+    "</ul></section>",
+    "<section><h2>Approvals</h2><ul>",
+    approvals,
+    "</ul></section>",
+    "<section><h2>Repair loops</h2><ul>",
+    repairs,
+    "</ul></section>",
+    "</body>",
+    "</html>",
+    ""
+  ].join("\n");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 async function skillsForPhase(phaseId: string): Promise<Array<{ id: string; title: string }>> {

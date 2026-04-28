@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { FileRunStore, FlowRuntime } from "../src/index.js";
+import { buildEvidenceGraph, FileRunStore, FlowRuntime, validateArtifactContent } from "../src/index.js";
 
 const flow = {
   id: "feature-default",
@@ -248,5 +248,76 @@ describe("artifacts and approvals", () => {
 
     expect(updated.current_phase).toBe("validation");
     expect(updated.completed_phases).toContain("implementation");
+  });
+
+  it("validates artifact quality against expectations and citation requirements", async () => {
+    const weak = validateArtifactContent({
+      artifactId: "discovery_report",
+      content: "# Discovery\n\nLooks good.\n",
+      expectation: "Cites concrete source paths and relevant external context.",
+      requireCitations: true
+    });
+
+    expect(weak.ok).toBe(false);
+    expect(weak.findings).toContain("discovery_report is shorter than the minimum useful artifact length");
+    expect(weak.findings).toContain("discovery_report requires at least one file, command, URL, or ticket citation");
+
+    const strong = validateArtifactContent({
+      artifactId: "discovery_report",
+      content: [
+        "# Discovery",
+        "",
+        "- Reviewed `packages/runtime/src/index.ts` for phase gates.",
+        "- Ran `npm test` and captured the passing baseline.",
+        "- Risk: connector writes remain preview-only until policy apply is added."
+      ].join("\n"),
+      expectation: "Cites concrete source paths and relevant external context.",
+      requireCitations: true
+    });
+
+    expect(strong.ok).toBe(true);
+    expect(strong.score).toBeGreaterThanOrEqual(90);
+  });
+
+  it("builds an evidence graph from run artifacts, policy decisions, previews, and approvals", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "swarm-flow-"));
+    const runtime = new FlowRuntime({ repoRoot: workspace, store: new FileRunStore(workspace) });
+    const run = await runtime.startFeatureRun({
+      flow,
+      title: "Bulk case reassignment",
+      goal: "Reassign cases by region",
+      now: new Date("2026-04-17T12:00:00.000Z")
+    });
+
+    const withArtifact = await runtime.registerArtifact(run.id, {
+      id: "acceptance_criteria",
+      fileName: "acceptance-criteria.md",
+      phaseId: "planning",
+      mediaType: "text/markdown",
+      content: "# Acceptance Criteria\n\n- Admins can reassign by region.\n"
+    });
+    const approved = await runtime.approvePhase(withArtifact.id, {
+      phaseId: "planning",
+      approvedBy: "sesh",
+      now: new Date("2026-04-17T13:00:00.000Z")
+    });
+
+    const graph = buildEvidenceGraph(approved);
+
+    expect(graph.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: `run:${run.id}`, type: "run" }),
+        expect.objectContaining({ id: "artifact:feature_brief", type: "artifact" }),
+        expect.objectContaining({ id: "artifact:acceptance_criteria", type: "artifact" }),
+        expect.objectContaining({ id: "approval:planning", type: "approval" })
+      ])
+    );
+    expect(graph.edges).toEqual(
+      expect.arrayContaining([
+        { from: `run:${run.id}`, to: "artifact:feature_brief", label: "contains" },
+        { from: "phase:planning", to: "artifact:acceptance_criteria", label: "produced" },
+        { from: "approval:planning", to: "phase:planning", label: "approves" }
+      ])
+    );
   });
 });
